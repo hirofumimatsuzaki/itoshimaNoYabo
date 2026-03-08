@@ -72,7 +72,7 @@ const WORKSHOP_TRADE_BONUS = 1;
 const WORKSHOP_TRADE_BONUS_CAP = 3;
 const ACTIONS_PER_TURN = 2;
 const SEASON_SPAN_TURNS = 3;
-const HUMAN_PLAYER_ID = 1;
+let HUMAN_PLAYER_ID = 1;
 
 // ---------- 迥ｶ諷・----------
 let grid = [];
@@ -132,6 +132,7 @@ let soundtrack = {
   phrase: [0, 2, 4, 7, 9, 7, 4, 2, 0, -3, 0, 2, 4, 2, 0, -3],
   button: { x: 0, y: 0, w: 124, h: 28 },
 };
+let startPickPopup = { open: true };
 
 // 盤面のズーム/パン（将来拡張）
 let boardX = 18;
@@ -150,8 +151,101 @@ function setup() {
 
   textFont("sans-serif");
   initializeGame();
+  openStartPickPopup();
 }
 
+function startBaseTile(playerId) {
+  if (playerId === 1) return { c: 4, r: 6 };
+  if (playerId === 2) return { c: 10, r: 4 };
+  return { c: 8, r: 2 };
+}
+
+function startBaseName(playerId) {
+  if (playerId === 1) return "二丈城";
+  if (playerId === 2) return "怡土城";
+  return "桜井神社";
+}
+
+function openStartPickPopup() {
+  startPickPopup.open = true;
+  message = "開始勢力を選んでください。";
+}
+
+function beginGameAs(playerId) {
+  HUMAN_PLAYER_ID = playerId;
+  initializeGame();
+  startPickPopup.open = false;
+  currentPlayer = max(0, players.findIndex((p) => p.id === HUMAN_PLAYER_ID));
+  selected = startBaseTile(HUMAN_PLAYER_ID);
+  const me = playerById(HUMAN_PLAYER_ID);
+  message = `${me.name}として開始 (${startBaseName(HUMAN_PLAYER_ID)})`;
+}
+
+function startPickPopupRect() {
+  const w = min(640, width - 80);
+  const h = 260;
+  return { x: (width - w) / 2, y: (height - h) / 2, w, h };
+}
+
+function startPickOptionRects() {
+  const r = startPickPopupRect();
+  const gap = 14;
+  const w = (r.w - 56 - gap * 2) / 3;
+  const y = r.y + 112;
+  return players.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    base: startBaseName(p.id),
+    x: r.x + 28 + i * (w + gap),
+    y,
+    w,
+    h: 102,
+  }));
+}
+
+function pickStartOption(mx, my) {
+  for (const op of startPickOptionRects()) {
+    if (mx >= op.x && mx <= op.x + op.w && my >= op.y && my <= op.y + op.h) return op;
+  }
+  return null;
+}
+
+function drawStartPickPopup() {
+  if (!startPickPopup.open) return;
+  fill(0, 120);
+  rect(0, 0, width, height);
+
+  const r = startPickPopupRect();
+  fill(255);
+  stroke(24, 52, 84);
+  strokeWeight(2);
+  rect(r.x, r.y, r.w, r.h, 16);
+
+  noStroke();
+  fill(20);
+  textAlign(LEFT, TOP);
+  textSize(24);
+  text("開始勢力を選択", r.x + 24, r.y + 20);
+  fill(75);
+  textSize(13);
+  text("自分が操作する勢力を1つ選んで開始します。", r.x + 24, r.y + 60);
+
+  for (const op of startPickOptionRects()) {
+    fill(244, 248, 255);
+    stroke(64, 102, 150);
+    strokeWeight(1.5);
+    rect(op.x, op.y, op.w, op.h, 12);
+    noStroke();
+    fill(25);
+    textSize(18);
+    textAlign(LEFT, TOP);
+    text(op.name, op.x + 12, op.y + 10);
+    textSize(12);
+    fill(75);
+    text(`拠点: ${op.base}`, op.x + 12, op.y + 42);
+    text("クリックで開始", op.x + 12, op.y + 68);
+  }
+}
 function drawUiIcon(kind, x, y, size = 8) {
   push();
   translate(x, y);
@@ -570,6 +664,7 @@ function draw() {
   if (eventPopup.open) drawEventPopup();
   if (workshopBuildPopup.open) drawWorkshopBuildPopup();
   if (gameState !== "playing") drawWinPopup();
+  if (startPickPopup.open) drawStartPickPopup();
   updateSoundtrack();
 }
 
@@ -577,6 +672,12 @@ function mousePressed() {
   activateSoundtrackByGesture();
   if (soundtrackButtonContains(mouseX, mouseY)) {
     toggleSoundtrack();
+    return;
+  }
+
+  if (startPickPopup.open) {
+    const pickedSide = pickStartOption(mouseX, mouseY);
+    if (pickedSide) beginGameAs(pickedSide.id);
     return;
   }
 
@@ -601,7 +702,7 @@ function mousePressed() {
 
   if (gameState !== "playing") {
     if (winPopupRestartContains(mouseX, mouseY)) {
-      initializeGame();
+      openStartPickPopup();
     }
     return;
   }
@@ -923,18 +1024,15 @@ function drawRightPanel() {
   buttons[7].draw(playable && isPlayer);
 
   const meStat = playerById(HUMAN_PLAYER_ID);
-  const ito = playerById(2);
-  const sakurai = playerById(3);
-  const myControl = round(controlRate(HUMAN_PLAYER_ID) * 100);
-  const itoControl = round(controlRate(2) * 100);
-  const sakuraiControl = round(controlRate(3) * 100);
+  const rankLines = [meStat, ...players.filter((p) => p.id !== HUMAN_PLAYER_ID)].slice(0, 3);
   const enemyControl = round(maxEnemyControlRate(HUMAN_PLAYER_ID) * 100);
   fill(40);
   textSize(11);
-  text(`自分: 文化${meStat.culture}/${CULTURE_WIN}・支配${myControl}%`, px + 18, py + 24);
-  text(`伊都: 文化${ito.culture}/${CULTURE_WIN}・支配${itoControl}%`, px + 18, py + 40);
-  text(`桜井神社: 文化${sakurai.culture}/${CULTURE_WIN}・支配${sakuraiControl}%`, px + 18, py + 56);
-  text(`山札: ${deck.length}  捨て札: ${discard.length}`, px + 18, py + 72);
+  for (let i = 0; i < rankLines.length; i++) {
+    const p = rankLines[i];
+    const title = i === 0 ? `${p.name}(自分)` : p.name;
+    text(`${title}: 文化${p.culture}/${CULTURE_WIN}・支配${round(controlRate(p.id) * 100)}%`, px + 18, py + 24 + i * 16);
+  }
   const playerEventState = eventReadyThisTurn[HUMAN_PLAYER_ID] ? (eventUsedThisTurn ? "使用済" : "使用可") : "発生なし";
   text(`イベント:${playerEventState} / 交易:${tradeUsedThisTurn ? "使用済" : "未使用"}`, px + 18, py + 88);
   text(`行動: ${actionsLeft[HUMAN_PLAYER_ID]}/${ACTIONS_PER_TURN} / 文化転向: ${flipCapturesThisTurn[HUMAN_PLAYER_ID]}/${MAX_FLIPS_PER_PLAYER_TURN}`, px + 18, py + 104);
@@ -2422,6 +2520,8 @@ function winPopupRestartContains(mx, my) {
   const r = winPopupRestartRect();
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }
+
+
 
 
 
