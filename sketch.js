@@ -354,61 +354,118 @@ function drawUiIcon(kind, x, y, size = 8) {
   pop();
 }
 
+function drawIsoPrism(x, y, w, d, h, topCol, leftCol, rightCol, edgeCol = [70, 70, 80]) {
+  const n = { x: x, y: y - d * 0.6 - h };
+  const e = { x: x + w * 0.52, y: y - d * 0.1 - h };
+  const s = { x: x, y: y + d * 0.32 - h };
+  const wv = { x: x - w * 0.52, y: y - d * 0.1 - h };
+  const e2 = { x: e.x, y: e.y + h };
+  const s2 = { x: s.x, y: s.y + h };
+  const w2 = { x: wv.x, y: wv.y + h };
+
+  stroke(edgeCol[0], edgeCol[1], edgeCol[2], 170);
+  strokeWeight(1.2);
+  fill(leftCol[0], leftCol[1], leftCol[2]);
+  beginShape();
+  vertex(wv.x, wv.y);
+  vertex(s.x, s.y);
+  vertex(s2.x, s2.y);
+  vertex(w2.x, w2.y);
+  endShape(CLOSE);
+
+  fill(rightCol[0], rightCol[1], rightCol[2]);
+  beginShape();
+  vertex(e.x, e.y);
+  vertex(s.x, s.y);
+  vertex(s2.x, s2.y);
+  vertex(e2.x, e2.y);
+  endShape(CLOSE);
+
+  fill(topCol[0], topCol[1], topCol[2]);
+  beginShape();
+  vertex(n.x, n.y);
+  vertex(e.x, e.y);
+  vertex(s.x, s.y);
+  vertex(wv.x, wv.y);
+  endShape(CLOSE);
+}
+
+function drawIsoRoof(x, y, w, d, h, roofCol = [160, 74, 66], edgeCol = [80, 40, 40]) {
+  const topY = y - h - d * 0.55;
+  const left = { x: x - w * 0.56, y: y - h - d * 0.1 };
+  const right = { x: x + w * 0.56, y: y - h - d * 0.1 };
+  const front = { x: x, y: y - h + d * 0.35 };
+  const apex = { x: x, y: topY - d * 0.45 };
+  stroke(edgeCol[0], edgeCol[1], edgeCol[2], 180);
+  strokeWeight(1.2);
+  fill(roofCol[0], roofCol[1], roofCol[2]);
+  beginShape();
+  vertex(apex.x, apex.y);
+  vertex(right.x, right.y);
+  vertex(front.x, front.y);
+  vertex(left.x, left.y);
+  endShape(CLOSE);
+}
+
+function drawIsoStructure(tile, x, y, size = 18) {
+  const t = tile.type;
+  if (t === TYPE.UMI) {
+    drawSeaPattern(x, y + size * 0.15, size * 0.9);
+    return;
+  }
+  if (t === TYPE.YAMA) {
+    push();
+    noStroke();
+    fill(150, 162, 175, 220);
+    triangle(x - size * 0.8, y + size * 0.5, x, y - size * 1.05, x + size * 0.85, y + size * 0.5);
+    fill(192, 202, 214, 200);
+    triangle(x - size * 0.18, y - size * 0.5, x, y - size * 1.05, x + size * 0.24, y - size * 0.5);
+    pop();
+    return;
+  }
+  if (t === TYPE.MINATO) {
+    drawHarborPier(x, y + size * 0.12, size * 0.86, isFishingPort(tile));
+    drawIsoPrism(x + size * 0.32, y - size * 0.05, size * 0.62, size * 0.42, size * 0.42, [214, 222, 236], [186, 197, 216], [168, 179, 198]);
+    drawIsoRoof(x + size * 0.32, y - size * 0.08, size * 0.6, size * 0.42, size * 0.42, [94, 132, 176], [56, 82, 118]);
+    return;
+  }
+  if (t === TYPE.JO) {
+    drawIsoPrism(x, y + size * 0.04, size * 0.86, size * 0.56, size * 0.7, [220, 207, 188], [190, 172, 152], [176, 158, 140]);
+    drawIsoRoof(x, y + size * 0.02, size * 0.88, size * 0.56, size * 0.7, [130, 78, 66], [74, 42, 38]);
+    drawIsoPrism(x - size * 0.48, y - size * 0.1, size * 0.34, size * 0.26, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
+    drawIsoPrism(x + size * 0.48, y - size * 0.1, size * 0.34, size * 0.26, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
+    return;
+  }
+  if (t === TYPE.KOBO) {
+    drawIsoPrism(x, y + size * 0.08, size * 0.9, size * 0.56, size * 0.56, [232, 196, 156], [205, 166, 126], [190, 152, 114]);
+    drawIsoRoof(x, y + size * 0.06, size * 0.9, size * 0.54, size * 0.56, [120, 88, 72], [70, 52, 45]);
+    stroke(86, 68, 58, 180);
+    strokeWeight(1.1);
+    line(x + size * 0.22, y - size * 0.62, x + size * 0.22, y - size * 0.98);
+    noStroke();
+    fill(170, 170, 170, 140);
+    ellipse(x + size * 0.28, y - size * 1.08 + sin(frameCount * 0.07) * 1.2, size * 0.16, size * 0.12);
+    return;
+  }
+  if (t === TYPE.TERA) {
+    drawIsoPrism(x, y + size * 0.08, size * 0.94, size * 0.58, size * 0.5, [236, 224, 208], [210, 195, 178], [196, 182, 166]);
+    drawIsoRoof(x, y + size * 0.06, size * 1.15, size * 0.72, size * 0.5, [108, 90, 86], [64, 54, 52]);
+    return;
+  }
+  if (t === TYPE.JINJA) {
+    drawIsoPrism(x, y + size * 0.1, size * 0.86, size * 0.52, size * 0.46, [246, 232, 220], [224, 208, 194], [208, 192, 178]);
+    drawIsoRoof(x, y + size * 0.09, size * 0.94, size * 0.54, size * 0.46, [190, 72, 66], [112, 46, 42]);
+    stroke(188, 62, 56);
+    strokeWeight(2.1);
+    line(x - size * 0.65, y + size * 0.22, x - size * 0.65, y - size * 0.32);
+    line(x + size * 0.65, y + size * 0.22, x + size * 0.65, y - size * 0.32);
+    line(x - size * 0.85, y - size * 0.34, x + size * 0.85, y - size * 0.34);
+    return;
+  }
+}
+
 function drawTileTypeIcon(tile, x, y, size = 10) {
-  const type = tile.type;
-  if (type === TYPE.UMI) {
-    push();
-    stroke(44, 116, 186);
-    noFill();
-    for (let i = 0; i < 2; i++) {
-      const yy = y + i * 5;
-      arc(x - 5, yy, size, 5, 0, PI);
-      arc(x + 3, yy, size, 5, 0, PI);
-    }
-    pop();
-    return;
-  }
-  if (type === TYPE.YAMA) {
-    push();
-    stroke(86, 90, 106);
-    fill(182, 188, 201);
-    triangle(x - size * 0.9, y + size * 0.9, x, y - size * 0.95, x + size * 0.9, y + size * 0.9);
-    pop();
-    return;
-  }
-  if (type === TYPE.MINATO) {
-    drawUiIcon("trade", x, y, size * 0.82);
-    return;
-  }
-  if (type === TYPE.JINJA) {
-    push();
-    stroke(196, 66, 66);
-    fill(252, 240, 228);
-    rect(x - size * 0.95, y - size * 0.15, size * 1.9, size * 0.95, 2);
-    line(x - size * 1.1, y - size * 0.15, x + size * 1.1, y - size * 0.15);
-    line(x - size * 0.7, y + size * 0.85, x - size * 0.7, y + size * 0.05);
-    line(x + size * 0.7, y + size * 0.85, x + size * 0.7, y + size * 0.05);
-    pop();
-    return;
-  }
-  if (type === TYPE.KOBO) {
-    drawUiIcon("workshop", x, y, size * 0.86);
-    return;
-  }
-  if (type === TYPE.JO) {
-    drawUiIcon("castle", x, y, size * 0.9);
-    return;
-  }
-  if (type === TYPE.TERA) {
-    push();
-    stroke(114, 80, 138);
-    fill(236, 214, 246);
-    rect(x - size * 0.75, y - size * 0.2, size * 1.5, size * 0.9, 2);
-    triangle(x - size, y - size * 0.2, x, y - size * 0.95, x + size, y - size * 0.2);
-    pop();
-    return;
-  }
-  drawUiIcon("food", x, y, size * 0.72);
+  drawIsoStructure(tile, x, y, size * 1.2);
 }
 
 function soundtrackButtonRect() {
@@ -525,6 +582,66 @@ function toggleSoundtrack() {
   activateSoundtrackByGesture();
   updateSoundtrackGain();
 }
+
+function playBattleSfx(intensity = 1) {
+  ensureSoundtrack();
+  if (!soundtrack.ready) return;
+
+  const ctx = soundtrack.ctx;
+  if (ctx.state === "suspended") ctx.resume();
+  const now = ctx.currentTime;
+  const power = constrain(intensity / FORCE_ATTACK, 0.7, 1.35);
+
+  const out = ctx.createGain();
+  out.gain.value = 0.0001;
+  out.connect(ctx.destination);
+  out.gain.setValueAtTime(0.0001, now);
+  out.gain.linearRampToValueAtTime(0.22 * power, now + 0.01);
+  out.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+
+  const drum = ctx.createOscillator();
+  const drumGain = ctx.createGain();
+  drum.type = "square";
+  drum.frequency.setValueAtTime(160 * power, now);
+  drum.frequency.exponentialRampToValueAtTime(70, now + 0.16);
+  drumGain.gain.setValueAtTime(0.24 * power, now);
+  drumGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+  drum.connect(drumGain);
+  drumGain.connect(out);
+  drum.start(now);
+  drum.stop(now + 0.18);
+
+  const clash = ctx.createOscillator();
+  const clashGain = ctx.createGain();
+  clash.type = "triangle";
+  clash.frequency.setValueAtTime(920, now + 0.03);
+  clash.frequency.exponentialRampToValueAtTime(420, now + 0.12);
+  clashGain.gain.setValueAtTime(0.11 * power, now + 0.03);
+  clashGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+  clash.connect(clashGain);
+  clashGain.connect(out);
+  clash.start(now + 0.03);
+  clash.stop(now + 0.2);
+
+  const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.14), ctx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.75;
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuffer;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.setValueAtTime(1100, now);
+  bp.Q.setValueAtTime(0.9, now);
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.12 * power, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+  noise.connect(bp);
+  bp.connect(noiseGain);
+  noiseGain.connect(out);
+  noise.start(now);
+  noise.stop(now + 0.15);
+}
+
 
 function resourcePairs(p) {
   return [
@@ -854,7 +971,6 @@ function drawHexGrid() {
       fill(terrainColor(t.type));
       drawHex(ctr.x, ctr.y, HEX_SIZE);
       if (t.type === TYPE.UMI) drawSeaPattern(isoCtr.x, isoCtr.y, HEX_SIZE * 0.88);
-      if (t.type === TYPE.MINATO) drawHarborPier(isoCtr.x, isoCtr.y, HEX_SIZE * 0.88, isFishingPort(t));
 
       if (t.owner === 0 && t.type !== TYPE.UMI) {
         const a = constrain((t.inf[HUMAN_PLAYER_ID] || 0) * 6, 0, 90);
@@ -877,10 +993,13 @@ function drawHexGrid() {
       fill(20);
       textAlign(CENTER, CENTER);
       textSize(14);
-      if (t.type !== TYPE.UMI && t.type !== TYPE.HEICHI) {
-        drawTileTypeIcon(t, isoCtr.x, isoCtr.y - 10, 11);
-        textSize(10);
-        text(tileLabel(t), isoCtr.x, isoCtr.y + 9);
+      if (t.type !== TYPE.HEICHI) {
+        drawIsoStructure(t, isoCtr.x, isoCtr.y - 4, HEX_SIZE * 0.62);
+        if (t.type !== TYPE.UMI) {
+          textSize(9);
+          fill(18, 26, 42, 230);
+          text(tileLabel(t), isoCtr.x, isoCtr.y + 12);
+        }
       }
 
       if (selected.c === c && selected.r === r) {
@@ -1565,6 +1684,7 @@ function handleAttackTargetClick(c, r) {
   }
 
   me.force -= need;
+  playBattleSfx(need);
   if (target.type === TYPE.JO) {
     const hpBefore = target.castleHp > 0 ? target.castleHp : CASTLE_SIEGE_HITS;
     const hpAfter = max(0, hpBefore - 1);
@@ -2520,6 +2640,8 @@ function winPopupRestartContains(mx, my) {
   const r = winPopupRestartRect();
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }
+
+
 
 
 
