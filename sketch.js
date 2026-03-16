@@ -73,6 +73,8 @@ const WORKSHOP_TRADE_BONUS_CAP = 3;
 const ACTIONS_PER_TURN = 2;
 const SEASON_SPAN_TURNS = 3;
 let HUMAN_PLAYER_ID = 1;
+const POP_GROWTH_FOOD_STEP = 6;
+const MAX_POP_GROWTH_PER_TURN = 2;
 
 // ---------- 迥ｶ諷・----------
 let grid = [];
@@ -881,7 +883,125 @@ function makeTile(c, r, type, name) {
     owner: 0,
     inf,
     castleHp: type === TYPE.JO ? CASTLE_SIEGE_HITS : 0,
+    population: initialPopulationForType(type),
   };
+}
+
+function initialPopulationForType(type) {
+  if (type === TYPE.MINATO) return 3;
+  if (type === TYPE.KOBO) return 3;
+  if (type === TYPE.JO) return 3;
+  if (type === TYPE.JINJA || type === TYPE.TERA) return 2;
+  if (type === TYPE.YAMA) return 1;
+  if (type === TYPE.UMI) return 0;
+  return 2;
+}
+
+function populationCap(tile) {
+  if (!tile) return 0;
+  if (tile.type === TYPE.MINATO) return 8;
+  if (tile.type === TYPE.KOBO) return 7;
+  if (tile.type === TYPE.JO) return 7;
+  if (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) return 5;
+  if (tile.type === TYPE.YAMA) return 4;
+  if (tile.type === TYPE.UMI) return 0;
+  return 6;
+}
+
+function clampTilePopulation(tile) {
+  if (!tile) return;
+  tile.population = constrain(tile.population || 0, 0, populationCap(tile));
+}
+
+function capturePopulationLoss(tile) {
+  if (!tile || tile.type === TYPE.UMI) return;
+  tile.population = max(1, ceil((tile.population || initialPopulationForType(tile.type)) * 0.65));
+  clampTilePopulation(tile);
+}
+
+function totalPopulation(playerId) {
+  let total = 0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const t = grid[r][c];
+    if (t.owner === playerId) total += t.population || 0;
+  }
+  return total;
+}
+
+function populationYield(tile) {
+  const pop = tile.population || 0;
+  if (pop <= 0) return { food: 0, gold: 0, culture: 0, force: 0 };
+  if (tile.type === TYPE.HEICHI) return { food: floor(pop / 2), gold: 0, culture: 0, force: 0 };
+  if (tile.type === TYPE.MINATO) {
+    if (isFishingPort(tile)) return { food: ceil(pop / 3), gold: 0, culture: 0, force: 0 };
+    return { food: 0, gold: ceil(pop / 2), culture: 0, force: 0 };
+  }
+  if (tile.type === TYPE.KOBO) return { food: 0, gold: floor(pop / 2), culture: floor(pop / 4), force: 0 };
+  if (tile.type === TYPE.JO) return { food: 0, gold: floor(pop / 3), culture: 0, force: floor(pop / 5) };
+  if (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) return { food: 0, gold: 0, culture: ceil(pop / 3), force: 0 };
+  if (tile.type === TYPE.YAMA) return { food: floor(pop / 4), gold: 0, culture: 0, force: 0 };
+  return { food: 0, gold: 0, culture: 0, force: 0 };
+}
+
+function populationFoodDemand(tile) {
+  if (!tile || tile.type === TYPE.UMI || tile.owner === 0) return 0;
+  return max(1, ceil((tile.population || 0) / 3));
+}
+
+function populationGrowthPriority(tile) {
+  if (tile.type === TYPE.MINATO) return 6;
+  if (tile.type === TYPE.KOBO) return 5;
+  if (tile.type === TYPE.HEICHI) return 4;
+  if (tile.type === TYPE.JO) return 3;
+  if (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) return 2;
+  if (tile.type === TYPE.YAMA) return 1;
+  return 0;
+}
+
+function applyPopulationPhase(playerId) {
+  const p = playerById(playerId);
+  const owned = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const t = grid[r][c];
+    if (t.owner === playerId && t.type !== TYPE.UMI) owned.push(t);
+  }
+
+  let demand = 0;
+  for (const tile of owned) demand += populationFoodDemand(tile);
+
+  let starvationLoss = 0;
+  if (p.food >= demand) {
+    p.food -= demand;
+  } else {
+    let deficit = demand - p.food;
+    p.food = 0;
+    owned.sort((a, b) => (b.population || 0) - (a.population || 0));
+    for (const tile of owned) {
+      while (deficit > 0 && (tile.population || 0) > 1) {
+        tile.population -= 1;
+        starvationLoss += 1;
+        deficit -= 1;
+      }
+      if (deficit <= 0) break;
+    }
+  }
+
+  let growth = 0;
+  const growthCandidates = owned
+    .filter((tile) => (tile.population || 0) < populationCap(tile))
+    .sort((a, b) => {
+      const prioDiff = populationGrowthPriority(b) - populationGrowthPriority(a);
+      if (prioDiff !== 0) return prioDiff;
+      return (a.population || 0) - (b.population || 0);
+    });
+  const growthBudget = min(MAX_POP_GROWTH_PER_TURN, floor(p.food / POP_GROWTH_FOOD_STEP));
+  for (let i = 0; i < growthBudget && i < growthCandidates.length; i++) {
+    growthCandidates[i].population += 1;
+    clampTilePopulation(growthCandidates[i]);
+    growth += 1;
+  }
+
+  return { demand, growth, starvationLoss };
 }
 
 function place(c, r, type, name) {
@@ -1150,7 +1270,7 @@ function drawRightPanel() {
   for (let i = 0; i < rankLines.length; i++) {
     const p = rankLines[i];
     const title = i === 0 ? `${p.name}(自分)` : p.name;
-    text(`${title}: 文化${p.culture}/${CULTURE_WIN}・支配${round(controlRate(p.id) * 100)}%`, px + 18, py + 24 + i * 16);
+    text(`${title}: 人口${totalPopulation(p.id)} 文化${p.culture}/${CULTURE_WIN}・支配${round(controlRate(p.id) * 100)}%`, px + 18, py + 24 + i * 16);
   }
   const playerEventState = eventReadyThisTurn[HUMAN_PLAYER_ID] ? (eventUsedThisTurn ? "使用済" : "使用可") : "発生なし";
   text(`イベント:${playerEventState} / 交易:${tradeUsedThisTurn ? "使用済" : "未使用"}`, px + 18, py + 88);
@@ -1161,7 +1281,7 @@ function drawRightPanel() {
   fill(28, 45, 72);
   textSize(13);
   text(`選択: ${tileLabel(t)}`, px + 18, tileInfoY);
-  text(`地形: ${t.type}`, px + 18, tileInfoY + 22);
+  text(`地形: ${t.type} / 人口:${t.population || 0}/${populationCap(t)}`, px + 18, tileInfoY + 22);
   text(`所有: ${ownerName(t.owner)}`, px + 18, tileInfoY + 44);
   text(`影響力: 二丈${t.inf[1] || 0} / 伊都${t.inf[2] || 0} / 志摩${t.inf[3] || 0}`, px + 18, tileInfoY + 66);
   text(`役割: ${tileRoleTitle(t)}`, px + 18, tileInfoY + 88);
@@ -1582,6 +1702,7 @@ function actionBuildCastle() {
   t.type = TYPE.JO;
   t.name = "新城";
   t.castleHp = CASTLE_SIEGE_HITS;
+  t.population = min(populationCap(t), max(t.population || 0, 3));
   pushTileFx(t.c, t.r, "築城", color(196, 142, 112));
   message = `築城を実行: ${tileLabel(t)} を建設 (金-${BUILD_CASTLE_COST})`;
   spendAction(me.id);
@@ -1625,6 +1746,7 @@ function buildWorkshopSelected(kind) {
   else if (kind === WORKSHOP_KIND.WASHI) t.name = "和紙工房";
   else if (kind === WORKSHOP_KIND.POTTERY) t.name = "陶芸工房";
   else t.name = "工房";
+  t.population = min(populationCap(t), max(t.population || 0, 3));
 
   selected = { c: t.c, r: t.r };
   pushTileFx(t.c, t.r, "工房建設", color(236, 150, 96));
@@ -1701,6 +1823,7 @@ function handleAttackTargetClick(c, r) {
 
   target.owner = me.id;
   resetTileInfluence(target);
+  capturePopulationLoss(target);
   if (target.type === TYPE.JO) target.castleHp = CASTLE_SIEGE_HITS;
   selected = { c, r };
   pushTileFx(target.c, target.r, "制圧", color(220, 70, 70));
@@ -1992,6 +2115,7 @@ function passive(playerIndex) {
   const p = players[playerIndex];
   let foodGain = 0, goldGain = 0, cultureGain = 0;
   let forceGain = 0, washiGain = 0, potteryGain = 0, innovationGain = 0;
+  let popFoodGain = 0, popGoldGain = 0, popCultureGain = 0, popForceGain = 0;
   let plainCount = 0, portCount = 0, fishingPortCount = 0;
   let fablabCount = 0, washiWorkshopCount = 0, potteryWorkshopCount = 0, genericWorkshopCount = 0;
   let shrineCount = 0, templeCount = 0;
@@ -2000,6 +2124,12 @@ function passive(playerIndex) {
     for (let c = 0; c < COLS; c++) {
       const t = grid[r][c];
       if (t.owner !== p.id) continue;
+      clampTilePopulation(t);
+      const popYield = populationYield(t);
+      popFoodGain += popYield.food;
+      popGoldGain += popYield.gold;
+      popCultureGain += popYield.culture;
+      popForceGain += popYield.force;
 
       if (t.type === TYPE.HEICHI) {
         foodGain += 1;
@@ -2045,6 +2175,10 @@ function passive(playerIndex) {
     }
   }
 
+  foodGain += popFoodGain;
+  goldGain += popGoldGain;
+  cultureGain += popCultureGain;
+  forceGain += popForceGain;
   p.food += foodGain;
   p.gold += goldGain;
   p.culture += cultureGain;
@@ -2052,6 +2186,8 @@ function passive(playerIndex) {
   p.washi += washiGain;
   p.pottery += potteryGain;
   p.innovation += innovationGain;
+
+  const popPhase = applyPopulationPhase(p.id);
 
   const upkeep = floor(p.force / 5) * FORCE_UPKEEP;
   p.gold -= upkeep;
@@ -2069,11 +2205,15 @@ function passive(playerIndex) {
   if (potteryWorkshopCount > 0) details.push(`陶芸工房x${potteryWorkshopCount}(金+${potteryWorkshopCount * 2} 文化+${(SOFT_CULTURE + 1) * potteryWorkshopCount} 陶器+${potteryWorkshopCount})`);
   if (genericWorkshopCount > 0) details.push(`工房x${genericWorkshopCount}(文化+${SOFT_CULTURE * genericWorkshopCount})`);
   if (shrineCount + templeCount > 0) details.push(`寺社x${shrineCount + templeCount}(文化+${SOFT_CULTURE * (shrineCount + templeCount)})`);
+  if (popFoodGain + popGoldGain + popCultureGain + popForceGain > 0) details.push(`人口収益(食料+${popFoodGain} 金+${popGoldGain} 文化+${popCultureGain} 武力+${popForceGain})`);
+  if (popPhase.demand > 0) details.push(`人口扶養(食料-${popPhase.demand})`);
+  if (popPhase.growth > 0) details.push(`人口成長+${popPhase.growth}`);
+  if (popPhase.starvationLoss > 0) details.push(`飢餓で人口-${popPhase.starvationLoss}`);
   if (upkeep > 0) details.push(`維持費(金-${upkeep})`);
 
   const netGold = goldGain - upkeep;
   const goldText = netGold >= 0 ? `金+${netGold}` : `金${netGold}`;
-  const totals = `収入: 食料+${foodGain} ${goldText} 文化+${cultureGain} 武力+${forceGain} 和紙+${washiGain} 陶器+${potteryGain} 機会+${innovationGain}`;
+  const totals = `収入: 食料+${foodGain - popPhase.demand} ${goldText} 文化+${cultureGain} 武力+${forceGain} 和紙+${washiGain} 陶器+${potteryGain} 機会+${innovationGain} 人口${totalPopulation(p.id)}`;
   incomeReport[p.id] = details.length > 0 ? `${totals} / ${details.join(" / ")}` : totals;
 }
 
@@ -2121,6 +2261,7 @@ function checkCultureFlipByPlayer(playerId) {
         }
         t.owner = playerId;
         resetTileInfluence(t);
+        capturePopulationLoss(t);
         if (t.type === TYPE.JO) t.castleHp = CASTLE_SIEGE_HITS;
         flipCapturesThisTurn[playerId] += 1;
         latestComment = gainComment(playerId, t, "文化転向");
@@ -2495,43 +2636,44 @@ function tileRoleTitle(tileOrType) {
 
 function tileRoleDetail(tile, playerId) {
   if (!tile) return "";
+  const popText = `人口${tile.population || 0}/${populationCap(tile)}。`;
   if (tile.type === TYPE.UMI) {
     return "海域: 占領・建設不可。港を押さえると海上交易の利益を得られる。";
   }
   if (tile.type === TYPE.JINJA) {
-    return `文化振興: 文化+4。実行時に隣接へ影響力+${SHRINE_CULTURE_PULSE}。`;
+    return `${popText} 文化振興: 文化+4。実行時に隣接へ影響力+${SHRINE_CULTURE_PULSE}。`;
   }
   if (tile.type === TYPE.KOBO) {
     const bonus = tradeWorkshopBonus(playerId);
     const kind = workshopKind(tile);
     if (kind === WORKSHOP_KIND.FABLAB) {
-      return `文化振興: 文化+${cultureActionGain(tile)}。新機会の開発で金・武力・機会が伸びる。交易時も追加で武力+1。`;
+      return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。新機会の開発で金・武力・機会が伸びる。交易時も追加で武力+1。`;
     }
     if (kind === WORKSHOP_KIND.WASHI) {
-      return `文化振興: 文化+${cultureActionGain(tile)}。和紙を生産し、金も増える。交易時にも和紙獲得。`;
+      return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。和紙を生産し、金も増える。交易時にも和紙獲得。`;
     }
     if (kind === WORKSHOP_KIND.POTTERY) {
-      return `文化振興: 文化+${cultureActionGain(tile)}。陶器献上で金が増える。交易時にも陶器獲得。`;
+      return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。陶器献上で金が増える。交易時にも陶器獲得。`;
     }
-    return `文化振興: 文化+${cultureActionGain(tile)}。交易に工房ボーナス+${bonus}（最大+${WORKSHOP_TRADE_BONUS_CAP}）。`;
+    return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。交易に工房ボーナス+${bonus}（最大+${WORKSHOP_TRADE_BONUS_CAP}）。`;
   }
   if (tile.type === TYPE.JO) {
     const hp = tile.castleHp > 0 ? tile.castleHp : CASTLE_SIEGE_HITS;
-    return `攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY}必要。攻城${CASTLE_SIEGE_HITS}回で陥落（耐久${hp}/${CASTLE_SIEGE_HITS}）。文化転向に耐性+${CASTLE_FLIP_RESIST}。`;
+    return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY}必要。攻城${CASTLE_SIEGE_HITS}回で陥落（耐久${hp}/${CASTLE_SIEGE_HITS}）。文化転向に耐性+${CASTLE_FLIP_RESIST}。`;
   }
   if (tile.type === TYPE.YAMA) {
-    return `攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
+    return `${popText} 攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
   }
   if (tile.type === TYPE.MINATO) {
     if (isFishingPort(tile)) {
-      return "漁港: 毎ターン食料+1。交易で金+4・食料+2。工房を持つと交易金がさらに伸びる。";
+      return `${popText} 漁港: 毎ターン食料+1。交易で金+4・食料+2。工房を持つと交易金がさらに伸びる。`;
     }
-    return "港: 毎ターン金+2。交易で金+6。工房を持つとさらに伸びる。";
+    return `${popText} 港: 毎ターン金+2。交易で金+6。工房を持つとさらに伸びる。`;
   }
   if (tile.type === TYPE.TERA) {
-    return "文化振興: 文化+4。神社と合わせると文化伝播が強化。";
+    return `${popText} 文化振興: 文化+4。神社と合わせると文化伝播が強化。`;
   }
-  return `平地: 特殊効果なし。食料収入の基盤。金${BUILD_CASTLE_COST}で築城、金${BUILD_WORKSHOP_COST}で工房建設が可能（山でも可）。`;
+  return `${popText} 平地: 特殊効果なし。食料収入の基盤。金${BUILD_CASTLE_COST}で築城、金${BUILD_WORKSHOP_COST}で工房建設が可能（山でも可）。`;
 }
 
 function gainComment(playerId, tile, reason) {
