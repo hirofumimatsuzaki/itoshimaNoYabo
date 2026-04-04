@@ -67,6 +67,7 @@ const MOUNTAIN_ATTACK_DISCOUNT = 1;
 const CASTLE_FLIP_RESIST = 3;
 const CASTLE_DEFENSE_PENALTY = 2;
 const CASTLE_SIEGE_HITS = 5;
+const BUILDING_LEVEL_MAX = 3;
 const SHRINE_CULTURE_PULSE = 1;
 const WORKSHOP_TRADE_BONUS = 1;
 const WORKSHOP_TRADE_BONUS_CAP = 3;
@@ -337,6 +338,13 @@ function drawUiIcon(kind, x, y, size = 8) {
     stroke(190, 70, 70);
     line(-size * 0.8, size * 0.8, size * 0.8, -size * 0.8);
     line(-size * 0.35, size * 0.95, size * 0.95, -size * 0.35);
+  } else if (kind === "upgrade") {
+    stroke(44, 130, 88);
+    noFill();
+    rect(-size * 0.75, -size * 0.1, size * 1.5, size * 0.95, 2);
+    line(0, size * 0.8, 0, -size * 0.85);
+    line(0, -size * 0.85, -size * 0.38, -size * 0.45);
+    line(0, -size * 0.85, size * 0.38, -size * 0.45);
   } else if (kind === "end") {
     stroke(64, 116, 76);
     fill(142, 214, 154);
@@ -409,6 +417,33 @@ function drawIsoRoof(x, y, w, d, h, roofCol = [160, 74, 66], edgeCol = [80, 40, 
   endShape(CLOSE);
 }
 
+function drawCastleStructure(tile, x, y, size) {
+  const level = buildingLevel(tile);
+
+  drawIsoPrism(x, y + size * 0.04, size * 0.9, size * 0.58, size * 0.42, [198, 184, 164], [168, 150, 132], [154, 138, 122]);
+  drawIsoPrism(x, y - size * 0.02, size * 0.86, size * 0.56, size * 0.72, [220, 207, 188], [190, 172, 152], [176, 158, 140]);
+  drawIsoRoof(x, y - size * 0.04, size * 0.9, size * 0.58, size * 0.72, [130, 78, 66], [74, 42, 38]);
+
+  drawIsoPrism(x - size * 0.5, y - size * 0.08, size * 0.34, size * 0.28, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
+  drawIsoPrism(x + size * 0.5, y - size * 0.08, size * 0.34, size * 0.28, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
+
+  if (level >= 2) {
+    drawIsoRoof(x - size * 0.5, y - size * 0.1, size * 0.36, size * 0.28, size * 0.58, [112, 68, 60], [66, 38, 36]);
+    drawIsoRoof(x + size * 0.5, y - size * 0.1, size * 0.36, size * 0.28, size * 0.58, [112, 68, 60], [66, 38, 36]);
+    drawIsoPrism(x, y - size * 0.5, size * 0.48, size * 0.32, size * 0.42, [236, 224, 208], [206, 190, 174], [190, 176, 162]);
+    drawIsoRoof(x, y - size * 0.54, size * 0.54, size * 0.34, size * 0.42, [146, 92, 76], [82, 50, 44]);
+  }
+
+  if (level >= 3) {
+    drawIsoPrism(x, y - size * 0.82, size * 0.28, size * 0.18, size * 0.34, [244, 236, 222], [214, 202, 188], [198, 188, 176]);
+    drawIsoRoof(x, y - size * 0.86, size * 0.34, size * 0.2, size * 0.34, [158, 104, 86], [92, 58, 50]);
+    drawIsoPrism(x - size * 0.82, y - size * 0.12, size * 0.2, size * 0.16, size * 0.42, [214, 200, 184], [188, 170, 154], [172, 156, 142]);
+    drawIsoPrism(x + size * 0.82, y - size * 0.12, size * 0.2, size * 0.16, size * 0.42, [214, 200, 184], [188, 170, 154], [172, 156, 142]);
+    drawIsoRoof(x - size * 0.82, y - size * 0.14, size * 0.22, size * 0.18, size * 0.42, [118, 72, 64], [70, 42, 38]);
+    drawIsoRoof(x + size * 0.82, y - size * 0.14, size * 0.22, size * 0.18, size * 0.42, [118, 72, 64], [70, 42, 38]);
+  }
+}
+
 function drawIsoStructure(tile, x, y, size = 18) {
   const t = tile.type;
   if (t === TYPE.UMI) {
@@ -432,10 +467,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.JO) {
-    drawIsoPrism(x, y + size * 0.04, size * 0.86, size * 0.56, size * 0.7, [220, 207, 188], [190, 172, 152], [176, 158, 140]);
-    drawIsoRoof(x, y + size * 0.02, size * 0.88, size * 0.56, size * 0.7, [130, 78, 66], [74, 42, 38]);
-    drawIsoPrism(x - size * 0.48, y - size * 0.1, size * 0.34, size * 0.26, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
-    drawIsoPrism(x + size * 0.48, y - size * 0.1, size * 0.34, size * 0.26, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
+    drawCastleStructure(tile, x, y, size);
     return;
   }
   if (t === TYPE.KOBO) {
@@ -687,6 +719,7 @@ function buttonIconKind(label) {
   if (label.includes("イベント")) return "event";
   if (label.includes("築城")) return "castle";
   if (label.includes("工房")) return "workshop";
+  if (label.includes("改修")) return "upgrade";
   if (label.includes("ターン終了")) return "end";
   return "action";
 }
@@ -878,13 +911,59 @@ function computeCenters() {
 function makeTile(c, r, type, name) {
   const inf = {};
   for (const p of players) inf[p.id] = 0;
+  const level = initialBuildingLevel(type);
   return {
     c, r, type, name,
     owner: 0,
     inf,
-    castleHp: type === TYPE.JO ? CASTLE_SIEGE_HITS : 0,
+    level,
+    castleHp: type === TYPE.JO ? castleMaxHp({ type, level }) : 0,
     population: initialPopulationForType(type),
   };
+}
+
+function supportsBuildingLevel(tileOrType) {
+  const type = typeof tileOrType === "string" ? tileOrType : (tileOrType ? tileOrType.type : "");
+  return type === TYPE.JO || type === TYPE.KOBO || type === TYPE.MINATO || type === TYPE.JINJA || type === TYPE.TERA;
+}
+
+function initialBuildingLevel(type) {
+  return supportsBuildingLevel(type) ? 1 : 0;
+}
+
+function buildingLevel(tile) {
+  if (!supportsBuildingLevel(tile)) return 0;
+  return constrain(tile.level || 1, 1, BUILDING_LEVEL_MAX);
+}
+
+function buildingLevelBonus(tile) {
+  return max(0, buildingLevel(tile) - 1);
+}
+
+function castleMaxHp(tile) {
+  if (!tile || tile.type !== TYPE.JO) return 0;
+  return CASTLE_SIEGE_HITS + buildingLevelBonus(tile) * 2;
+}
+
+function upgradeCost(tile) {
+  if (!supportsBuildingLevel(tile)) return 0;
+  const level = buildingLevel(tile);
+  return (tile.type === TYPE.JO ? 5 : 4) + level * 3;
+}
+
+function canUpgradeBuilding(tile, playerId) {
+  return !!tile && tile.owner === playerId && supportsBuildingLevel(tile) && buildingLevel(tile) < BUILDING_LEVEL_MAX;
+}
+
+function normalizeTileBuildingState(tile) {
+  if (!tile) return;
+  const currentLevel = tile.level;
+  tile.level = supportsBuildingLevel(tile) ? constrain(currentLevel || 1, 1, BUILDING_LEVEL_MAX) : 0;
+  if (tile.type === TYPE.JO) {
+    tile.castleHp = constrain(tile.castleHp || castleMaxHp(tile), 0, castleMaxHp(tile));
+  } else {
+    tile.castleHp = 0;
+  }
 }
 
 function initialPopulationForType(type) {
@@ -899,10 +978,11 @@ function initialPopulationForType(type) {
 
 function populationCap(tile) {
   if (!tile) return 0;
-  if (tile.type === TYPE.MINATO) return 8;
-  if (tile.type === TYPE.KOBO) return 7;
-  if (tile.type === TYPE.JO) return 7;
-  if (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) return 5;
+  const bonus = buildingLevelBonus(tile);
+  if (tile.type === TYPE.MINATO) return 8 + bonus;
+  if (tile.type === TYPE.KOBO) return 7 + bonus;
+  if (tile.type === TYPE.JO) return 7 + bonus * 2;
+  if (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) return 5 + bonus;
   if (tile.type === TYPE.YAMA) return 4;
   if (tile.type === TYPE.UMI) return 0;
   return 6;
@@ -1260,7 +1340,8 @@ function drawRightPanel() {
   buttons[4].draw(playable && isPlayer && hasAction && eventReadyThisTurn[HUMAN_PLAYER_ID] && !eventUsedThisTurn);
   buttons[5].draw(playable && isPlayer && hasAction && isMine && canBuildCastleOnTile(t) && me.gold >= BUILD_CASTLE_COST);
   buttons[6].draw(playable && isPlayer && hasAction && isMine && canBuildWorkshopOnTile(t) && me.gold >= BUILD_WORKSHOP_COST);
-  buttons[7].draw(playable && isPlayer);
+  buttons[7].draw(playable && isPlayer && hasAction && isMine && canUpgradeBuilding(t, me.id) && me.gold >= upgradeCost(t));
+  buttons[8].draw(playable && isPlayer);
 
   const meStat = playerById(HUMAN_PLAYER_ID);
   const rankLines = [meStat, ...players.filter((p) => p.id !== HUMAN_PLAYER_ID)].slice(0, 3);
@@ -1281,7 +1362,8 @@ function drawRightPanel() {
   fill(28, 45, 72);
   textSize(13);
   text(`選択: ${tileLabel(t)}`, px + 18, tileInfoY);
-  text(`地形: ${t.type} / 人口:${t.population || 0}/${populationCap(t)}`, px + 18, tileInfoY + 22);
+  const levelText = supportsBuildingLevel(t) ? ` / Lv${buildingLevel(t)}` : "";
+  text(`地形: ${t.type}${levelText} / 人口:${t.population || 0}/${populationCap(t)}`, px + 18, tileInfoY + 22);
   text(`所有: ${ownerName(t.owner)}`, px + 18, tileInfoY + 44);
   text(`影響力: 二丈${t.inf[1] || 0} / 伊都${t.inf[2] || 0} / 志摩${t.inf[3] || 0}`, px + 18, tileInfoY + 66);
   text(`役割: ${tileRoleTitle(t)}`, px + 18, tileInfoY + 88);
@@ -1472,6 +1554,10 @@ function buildButtons() {
   const bw = UI_W - 36;
   const bh = 30;
   const gap = 4;
+  const selectedTile = getTile(selected.c, selected.r);
+  const upgradeLabel = canUpgradeBuilding(selectedTile, HUMAN_PLAYER_ID)
+    ? `改修 (金${upgradeCost(selectedTile)})`
+    : "改修 (条件あり)";
 
   buttons.push(new Button(px, py, bw, bh, "文化振興 (金3)", "culture", () => actionCulture())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, "交易 (港で強)", "trade", () => actionTrade())); py += bh + gap;
@@ -1480,6 +1566,7 @@ function buildButtons() {
   buttons.push(new Button(px, py, bw, bh, "イベント (1回)", "event", () => actionEvent())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, `築城 (金${BUILD_CASTLE_COST})`, "castle", () => actionBuildCastle())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, `工房建設 (金${BUILD_WORKSHOP_COST})`, "workshop", () => actionBuildWorkshop())); py += bh + gap;
+  buttons.push(new Button(px, py, bw, bh, upgradeLabel, "upgrade", () => actionUpgradeBuilding())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, "ターン終了", "end", () => actionEndTurn()));
 }
 
@@ -1513,43 +1600,66 @@ function workshopKind(tile) {
 
 function workshopActionBonus(tile) {
   const kind = workshopKind(tile);
+  const bonus = buildingLevelBonus(tile);
+  function scaled(base) {
+    return {
+      culture: base.culture + bonus,
+      gold: base.gold + bonus,
+      force: base.force + (base.force > 0 ? bonus : 0),
+      washi: base.washi + (base.washi > 0 ? bonus : 0),
+      pottery: base.pottery + (base.pottery > 0 ? bonus : 0),
+      innovation: base.innovation + (base.innovation > 0 ? bonus : 0),
+    };
+  }
   if (kind === WORKSHOP_KIND.FABLAB) {
-    return { culture: 1, gold: 2, force: 1, washi: 0, pottery: 0, innovation: 1 };
+    return scaled({ culture: 1, gold: 2, force: 1, washi: 0, pottery: 0, innovation: 1 });
   }
   if (kind === WORKSHOP_KIND.WASHI) {
-    return { culture: 2, gold: 1, force: 0, washi: 2, pottery: 0, innovation: 0 };
+    return scaled({ culture: 2, gold: 1, force: 0, washi: 2, pottery: 0, innovation: 0 });
   }
   if (kind === WORKSHOP_KIND.POTTERY) {
-    return { culture: 1, gold: 2, force: 0, washi: 0, pottery: 2, innovation: 0 };
+    return scaled({ culture: 1, gold: 2, force: 0, washi: 0, pottery: 2, innovation: 0 });
   }
-  return { culture: 1, gold: 1, force: 0, washi: 0, pottery: 0, innovation: 0 };
+  return scaled({ culture: 1, gold: 1, force: 0, washi: 0, pottery: 0, innovation: 0 });
 }
 
 function workshopTradeBonus(tile) {
   const kind = workshopKind(tile);
+  const bonus = buildingLevelBonus(tile);
+  function scaled(base) {
+    return {
+      gold: base.gold + bonus,
+      force: base.force + (base.force > 0 ? bonus : 0),
+      culture: base.culture + (base.culture > 0 ? bonus : 0),
+      washi: base.washi + (base.washi > 0 ? bonus : 0),
+      pottery: base.pottery + (base.pottery > 0 ? bonus : 0),
+      innovation: base.innovation + (base.innovation > 0 ? bonus : 0),
+    };
+  }
   if (kind === WORKSHOP_KIND.FABLAB) {
-    return { gold: 2, force: 1, culture: 0, washi: 0, pottery: 0, innovation: 1 };
+    return scaled({ gold: 2, force: 1, culture: 0, washi: 0, pottery: 0, innovation: 1 });
   }
   if (kind === WORKSHOP_KIND.WASHI) {
-    return { gold: 2, force: 0, culture: 1, washi: 1, pottery: 0, innovation: 0 };
+    return scaled({ gold: 2, force: 0, culture: 1, washi: 1, pottery: 0, innovation: 0 });
   }
   if (kind === WORKSHOP_KIND.POTTERY) {
-    return { gold: 3, force: 0, culture: 1, washi: 0, pottery: 1, innovation: 0 };
+    return scaled({ gold: 3, force: 0, culture: 1, washi: 0, pottery: 1, innovation: 0 });
   }
-  return { gold: 1, force: 0, culture: 0, washi: 0, pottery: 0, innovation: 0 };
+  return scaled({ gold: 1, force: 0, culture: 0, washi: 0, pottery: 0, innovation: 0 });
 }
 
 function workshopCulturePower(tile) {
   const kind = workshopKind(tile);
-  if (kind === WORKSHOP_KIND.WASHI) return 5;
-  if (kind === WORKSHOP_KIND.FABLAB) return 4;
-  if (kind === WORKSHOP_KIND.POTTERY) return 4;
-  return 5;
+  const bonus = buildingLevelBonus(tile);
+  if (kind === WORKSHOP_KIND.WASHI) return 5 + bonus;
+  if (kind === WORKSHOP_KIND.FABLAB) return 4 + bonus;
+  if (kind === WORKSHOP_KIND.POTTERY) return 4 + bonus;
+  return 5 + bonus;
 }
 
 function cultureActionGain(tile) {
   if (tile.type !== TYPE.KOBO) {
-    const base = (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? 4 : 2;
+    const base = (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? 4 + buildingLevelBonus(tile) : 2;
     const seasonBonus = (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? seasonState.shrineCultureActionBonus : 0;
     return base + seasonBonus;
   }
@@ -1652,15 +1762,59 @@ function actionForce() {
   checkWinConditions();
 }
 
+function attackNeed(from, target, attackerId) {
+  const ignoreMountain = mountainPassTurns[attackerId] > 0;
+  const penalty = target.type === TYPE.YAMA && !ignoreMountain ? 3 + seasonState.mountainAttackPenalty : 0;
+  const castlePenalty = target.type === TYPE.JO ? CASTLE_DEFENSE_PENALTY + buildingLevelBonus(target) : 0;
+  const defenderComboPenalty = (target.owner !== 0 && hasMountainCastleCombo(target.owner) && (target.type === TYPE.YAMA || target.type === TYPE.JO)) ? 1 : 0;
+  const discount = (from.type === TYPE.JO ? CASTLE_ATTACK_DISCOUNT : 0)
+    + (from.type === TYPE.YAMA ? MOUNTAIN_ATTACK_DISCOUNT : 0)
+    + ((hasMountainCastleCombo(attackerId) && (from.type === TYPE.JO || from.type === TYPE.YAMA)) ? 1 : 0);
+  return max(1, FORCE_ATTACK + penalty + castlePenalty + defenderComboPenalty - discount);
+}
+
+function attackTargetStatus(attacker, from, target) {
+  if (!from || from.owner !== attacker.id) {
+    return { ok: false, reason: "攻撃元が無効です。" };
+  }
+  if (!target) {
+    return { ok: false, reason: "攻撃先が不正です。" };
+  }
+  const isAdjacent = neighbors6(from.c, from.r).some((nt) => nt.c === target.c && nt.r === target.r);
+  if (!isAdjacent) {
+    return { ok: false, reason: `${tileLabel(target)} は隣接していないため攻撃できません。` };
+  }
+  if (target.type === TYPE.UMI) {
+    return { ok: false, reason: `${tileLabel(target)} は海域のため攻撃できません。` };
+  }
+  if (target.owner === attacker.id) {
+    return { ok: false, reason: `${tileLabel(target)} は自領のため攻撃できません。` };
+  }
+  const need = attackNeed(from, target, attacker.id);
+  if (attacker.force < need) {
+    return { ok: false, reason: `${tileLabel(target)} への攻撃には武力${need}が必要です。`, need };
+  }
+  return { ok: true, need };
+}
+
 function actionAttack() {
   if (!canPlayerAct()) return;
   const me = players[currentPlayer];
   const t = getTile(selected.c, selected.r);
   if (t.owner !== me.id) { message = "自領の拠点を選んでください。"; return; }
-  const attackable = neighbors6(t.c, t.r).some((nt) => nt.type !== TYPE.UMI && nt.owner !== me.id);
-  if (!attackable) { message = "攻撃できる隣接タイルがありません。"; return; }
+  const targets = neighbors6(t.c, t.r)
+    .filter((nt) => nt.type !== TYPE.UMI && nt.owner !== me.id)
+    .map((nt) => attackTargetStatus(me, t, nt));
+  const attackable = targets.some((info) => info.ok);
+  if (!attackable) {
+    const minNeed = targets.filter((info) => typeof info.need === "number").reduce((acc, info) => min(acc, info.need), 999);
+    message = minNeed < 999
+      ? `隣接先へ攻撃できません。最小でも武力${minNeed}が必要です。`
+      : "攻撃できる隣接タイルがありません。";
+    return;
+  }
   attackMode = { active: true, from: { c: t.c, r: t.r } };
-  message = `攻撃先を選択してください: ${tileLabel(t)} の隣接マスをクリック`;
+  message = `攻撃先を選択してください: ${tileLabel(t)} の隣接マスをクリック。攻撃不可なら理由を表示します。`;
 }
 
 function actionEvent() {
@@ -1670,7 +1824,7 @@ function actionEvent() {
 
   const me = players[currentPlayer];
   const t = getTile(selected.c, selected.r);
-  const card = drawEventCard();
+  const card = drawEventCard(me);
   const effectText = applyEvent(card, me, t, true);
   eventUsedThisTurn = true;
   eventUsedByPlayer[me.id] = true;
@@ -1699,9 +1853,11 @@ function actionBuildCastle() {
   if (me.gold < BUILD_CASTLE_COST) { message = `金が足りません (必要: ${BUILD_CASTLE_COST})。`; return; }
 
   me.gold -= BUILD_CASTLE_COST;
+  const keepLevel = t.type === TYPE.JO ? buildingLevel(t) : 1;
   t.type = TYPE.JO;
+  t.level = keepLevel;
   t.name = "新城";
-  t.castleHp = CASTLE_SIEGE_HITS;
+  t.castleHp = castleMaxHp(t);
   t.population = min(populationCap(t), max(t.population || 0, 3));
   pushTileFx(t.c, t.r, "築城", color(196, 142, 112));
   message = `築城を実行: ${tileLabel(t)} を建設 (金-${BUILD_CASTLE_COST})`;
@@ -1741,16 +1897,40 @@ function buildWorkshopSelected(kind) {
   }
 
   me.gold -= BUILD_WORKSHOP_COST;
+  const keepLevel = t.type === TYPE.KOBO ? buildingLevel(t) : 1;
   t.type = TYPE.KOBO;
+  t.level = keepLevel;
   if (kind === WORKSHOP_KIND.FABLAB) t.name = "ファブラボ";
   else if (kind === WORKSHOP_KIND.WASHI) t.name = "和紙工房";
   else if (kind === WORKSHOP_KIND.POTTERY) t.name = "陶芸工房";
   else t.name = "工房";
+  t.castleHp = 0;
   t.population = min(populationCap(t), max(t.population || 0, 3));
 
   selected = { c: t.c, r: t.r };
   pushTileFx(t.c, t.r, "工房建設", color(236, 150, 96));
   message = `工房建設を実行: ${t.name} を建設 (金-${BUILD_WORKSHOP_COST})`;
+  spendAction(me.id);
+  message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+  checkWinConditions();
+}
+
+function actionUpgradeBuilding() {
+  if (!canPlayerAct()) return;
+  const me = players[currentPlayer];
+  const t = getTile(selected.c, selected.r);
+  if (t.owner !== me.id) { message = "自領の建物を選んでください。"; return; }
+  if (!supportsBuildingLevel(t)) { message = "改修できるのは城・工房・港・神社・寺です。"; return; }
+  if (buildingLevel(t) >= BUILDING_LEVEL_MAX) { message = `${tileLabel(t)} は最大レベルです。`; return; }
+  const cost = upgradeCost(t);
+  if (me.gold < cost) { message = `金が足りません (必要: ${cost})。`; return; }
+
+  me.gold -= cost;
+  t.level = buildingLevel(t) + 1;
+  if (t.type === TYPE.JO) t.castleHp = castleMaxHp(t);
+  t.population = min(populationCap(t), max(t.population || 0, initialPopulationForType(t.type) + buildingLevelBonus(t)));
+  pushTileFx(t.c, t.r, `Lv${buildingLevel(t)}`, color(58, 170, 110));
+  message = `改修を実行: ${tileLabel(t)} をLv${buildingLevel(t)}に増築 (金-${cost})`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -1776,44 +1956,23 @@ function handleAttackTargetClick(c, r) {
     message = "攻撃元が無効になりました。やり直してください。";
     return;
   }
-
-  const isAdjacent = neighbors6(from.c, from.r).some((nt) => nt.c === c && nt.r === r);
-  if (!isAdjacent) {
-    message = "攻撃先は攻撃元の隣接マスを選んでください。";
+  const status = attackTargetStatus(me, from, target);
+  if (!status.ok) {
+    message = status.reason;
     return;
   }
-  if (target.type === TYPE.UMI) {
-    message = "海マスは攻撃・占領できません。";
-    return;
-  }
-  if (target.owner === me.id) {
-    message = "自領マスは攻撃できません。";
-    return;
-  }
-
-  const ignoreMountain = mountainPassTurns[me.id] > 0;
-  const penalty = target.type === TYPE.YAMA && !ignoreMountain ? 3 + seasonState.mountainAttackPenalty : 0;
-  const castlePenalty = target.type === TYPE.JO ? CASTLE_DEFENSE_PENALTY : 0;
-  const defenderComboPenalty = (target.owner !== 0 && hasMountainCastleCombo(target.owner) && (target.type === TYPE.YAMA || target.type === TYPE.JO)) ? 1 : 0;
-  const discount = (from.type === TYPE.JO ? CASTLE_ATTACK_DISCOUNT : 0)
-    + (from.type === TYPE.YAMA ? MOUNTAIN_ATTACK_DISCOUNT : 0)
-    + ((hasMountainCastleCombo(me.id) && (from.type === TYPE.JO || from.type === TYPE.YAMA)) ? 1 : 0);
-  const need = max(1, FORCE_ATTACK + penalty + castlePenalty + defenderComboPenalty - discount);
-  if (me.force < need) {
-    message = `武力不足です (必要: ${need})`;
-    attackMode = { active: false, from: null };
-    return;
-  }
+  const need = status.need;
 
   me.force -= need;
   playBattleSfx(need);
   if (target.type === TYPE.JO) {
-    const hpBefore = target.castleHp > 0 ? target.castleHp : CASTLE_SIEGE_HITS;
+    const maxHp = castleMaxHp(target);
+    const hpBefore = target.castleHp > 0 ? target.castleHp : maxHp;
     const hpAfter = max(0, hpBefore - 1);
     target.castleHp = hpAfter;
-    pushTileFx(target.c, target.r, hpAfter > 0 ? `攻城 ${hpAfter}/${CASTLE_SIEGE_HITS}` : "陥落", color(220, 70, 70));
+    pushTileFx(target.c, target.r, hpAfter > 0 ? `攻城 ${hpAfter}/${maxHp}` : "陥落", color(220, 70, 70));
     if (hpAfter > 0) {
-      message = `攻城: ${tileLabel(target)} の耐久 ${hpAfter}/${CASTLE_SIEGE_HITS} (武力-${need})`;
+      message = `攻城: ${tileLabel(target)} の耐久 ${hpAfter}/${maxHp} (武力-${need})`;
       attackMode = { active: false, from: null };
       spendAction(me.id);
       message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
@@ -1824,7 +1983,7 @@ function handleAttackTargetClick(c, r) {
   target.owner = me.id;
   resetTileInfluence(target);
   capturePopulationLoss(target);
-  if (target.type === TYPE.JO) target.castleHp = CASTLE_SIEGE_HITS;
+  if (target.type === TYPE.JO) target.castleHp = castleMaxHp(target);
   selected = { c, r };
   pushTileFx(target.c, target.r, "制圧", color(220, 70, 70));
   latestComment = gainComment(me.id, target, "攻撃");
@@ -1913,6 +2072,54 @@ function initEventDeck() {
     { id: "C08", name: "寺の巡礼", desc: "寺から文化が広がる。", type: "culture", apply: () => ({ templePulse: 2 }) },
     { id: "E01", name: "港の大市", desc: "交易が活性化し収入が増える。", type: "economy", apply: () => ({ gold: 4, portBonus: true }) },
     { id: "E02", name: "豊作", desc: "食料が増え、文化も少し上がる。", type: "economy", apply: () => ({ food: 5, culture: 1 }) },
+    {
+      id: "W01",
+      name: "試作機の完成",
+      desc: "ファブラボで新しい機械が生まれる。",
+      type: "workshop",
+      requires: (p) => countOwnedWorkshopKind(p.id, WORKSHOP_KIND.FABLAB) > 0,
+      apply: (p) => {
+        const labs = countOwnedWorkshopKind(p.id, WORKSHOP_KIND.FABLAB);
+        return {
+          gold: 2 + labs,
+          force: 1 + floor(labs / 2),
+          innovation: 1 + labs,
+          story: `ファブラボで新しい機械を発明した`,
+        };
+      },
+    },
+    {
+      id: "W02",
+      name: "朝廷への献上紙",
+      desc: "和紙工房の品が献上される。",
+      type: "workshop",
+      requires: (p) => countOwnedWorkshopKind(p.id, WORKSHOP_KIND.WASHI) > 0,
+      apply: (p) => {
+        const mills = countOwnedWorkshopKind(p.id, WORKSHOP_KIND.WASHI);
+        return {
+          gold: 1 + mills * 2,
+          culture: 1 + mills,
+          washi: mills,
+          story: `和紙工房が紙を献上した`,
+        };
+      },
+    },
+    {
+      id: "W03",
+      name: "海の向こうの評判",
+      desc: "陶芸品が海外で評判を呼ぶ。",
+      type: "workshop",
+      requires: (p) => countOwnedWorkshopKind(p.id, WORKSHOP_KIND.POTTERY) > 0,
+      apply: (p) => {
+        const kilns = countOwnedWorkshopKind(p.id, WORKSHOP_KIND.POTTERY);
+        return {
+          gold: 2 + kilns * 2,
+          culture: 1 + kilns,
+          pottery: kilns,
+          story: `陶器がヨーロッパで売れた`,
+        };
+      },
+    },
     { id: "H01", name: "海賊", desc: "港の混乱で資金を失う。", type: "harass", apply: () => ({ goldLoss: 2 }) },
     { id: "H02", name: "内紛", desc: "相手の文化が低下する。", type: "harass", apply: () => ({ enemyCultureDown: 2 }) },
   ];
@@ -1929,12 +2136,22 @@ function shuffleDeck(arr) {
   }
 }
 
-function drawEventCard() {
+function drawEventCard(player = null) {
   if (deck.length === 0) {
     deck = discard.slice();
     discard = [];
     shuffleDeck(deck);
   }
+  if (!player) return deck.pop();
+
+  for (let i = deck.length - 1; i >= 0; i--) {
+    const card = deck[i];
+    if (!card.requires || card.requires(player)) {
+      deck.splice(i, 1);
+      return card;
+    }
+  }
+
   return deck.pop();
 }
 
@@ -1942,6 +2159,7 @@ function applyEvent(card, p, selectedTile, showMessage) {
   const result = card.apply(p, selectedTile) || {};
   const enemy = strongestEnemyByCulture(p.id);
   let logs = [];
+  let storyText = result.story || "";
 
   if (result.culture) {
     p.culture += result.culture;
@@ -1954,6 +2172,22 @@ function applyEvent(card, p, selectedTile, showMessage) {
   if (result.food) {
     p.food += result.food;
     logs.push(`食料 +${result.food}`);
+  }
+  if (result.force) {
+    p.force += result.force;
+    logs.push(`武力 +${result.force}`);
+  }
+  if (result.washi) {
+    p.washi += result.washi;
+    logs.push(`和紙 +${result.washi}`);
+  }
+  if (result.pottery) {
+    p.pottery += result.pottery;
+    logs.push(`陶器 +${result.pottery}`);
+  }
+  if (result.innovation) {
+    p.innovation += result.innovation;
+    logs.push(`機会 +${result.innovation}`);
   }
   if (result.goldLoss) {
     p.gold = max(0, p.gold - result.goldLoss);
@@ -1996,7 +2230,7 @@ function applyEvent(card, p, selectedTile, showMessage) {
 
   checkCultureFlipByPlayer(p.id);
 
-  const effectText = logs.length > 0 ? `効果: ${logs.join(" / ")}` : "効果なし";
+  const effectText = `${storyText ? `${storyText} / ` : ""}${logs.length > 0 ? `効果: ${logs.join(" / ")}` : "効果なし"}`;
   if (showMessage) {
     message = `イベント発動: ${card.name} / ${effectText}`;
   }
@@ -2044,6 +2278,15 @@ function countOwnedType(playerId, type) {
   return n;
 }
 
+function countOwnedWorkshopKind(playerId, kind) {
+  let n = 0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const t = grid[r][c];
+    if (t.owner === playerId && t.type === TYPE.KOBO && workshopKind(t) === kind) n++;
+  }
+  return n;
+}
+
 function hasPortWorkshopCombo(playerId) {
   return countOwnedType(playerId, TYPE.MINATO) > 0 && countOwnedType(playerId, TYPE.KOBO) > 0;
 }
@@ -2055,12 +2298,13 @@ function hasShrineTempleCombo(playerId) {
 function tradeGain(playerId, tile) {
   const tileType = tile ? tile.type : TYPE.HEICHI;
   const fishing = isFishingPort(tile);
-  const base = tileType === TYPE.MINATO ? (fishing ? 4 : 6) : 2;
+  const levelBonus = buildingLevelBonus(tile);
+  const base = tileType === TYPE.MINATO ? (fishing ? 4 + levelBonus : 6 + levelBonus * 2) : 2;
   const combo = hasPortWorkshopCombo(playerId) ? 2 : 0;
   const workshopBonus = tradeWorkshopBonus(playerId);
   const seasonGold = tileType === TYPE.MINATO ? seasonState.portTradeBonus : 0;
   const seasonFood = tileType === TYPE.MINATO && fishing ? seasonState.fishingFoodBonus : 0;
-  return { gold: base + combo + workshopBonus + seasonGold, food: (tileType === TYPE.MINATO && fishing ? 2 : 0) + seasonFood };
+  return { gold: base + combo + workshopBonus + seasonGold, food: (tileType === TYPE.MINATO && fishing ? 2 + levelBonus : 0) + seasonFood };
 }
 
 function tradeWorkshopBonus(playerId) {
@@ -2116,6 +2360,12 @@ function passive(playerIndex) {
   let foodGain = 0, goldGain = 0, cultureGain = 0;
   let forceGain = 0, washiGain = 0, potteryGain = 0, innovationGain = 0;
   let popFoodGain = 0, popGoldGain = 0, popCultureGain = 0, popForceGain = 0;
+  let portGoldIncome = 0, fishingFoodIncome = 0;
+  let fablabGoldIncome = 0, fablabForceIncome = 0, fablabCultureIncome = 0, fablabInnovationIncome = 0;
+  let washiGoldIncome = 0, washiCultureIncome = 0, washiIncome = 0;
+  let potteryGoldIncome = 0, potteryCultureIncome = 0, potteryIncome = 0;
+  let genericWorkshopCultureIncome = 0;
+  let shrineTempleCultureIncome = 0;
   let plainCount = 0, portCount = 0, fishingPortCount = 0;
   let fablabCount = 0, washiWorkshopCount = 0, potteryWorkshopCount = 0, genericWorkshopCount = 0;
   let shrineCount = 0, templeCount = 0;
@@ -2136,39 +2386,56 @@ function passive(playerIndex) {
         plainCount += 1;
       }
       if (t.type === TYPE.MINATO) {
+        const bonus = buildingLevelBonus(t);
         if (isFishingPort(t)) {
-          foodGain += 1;
+          foodGain += 1 + bonus;
+          fishingFoodIncome += 1 + bonus;
           fishingPortCount += 1;
         } else {
-          goldGain += 2;
+          goldGain += 2 + bonus;
+          portGoldIncome += 2 + bonus;
           portCount += 1;
         }
       }
       if (t.type === TYPE.KOBO) {
         const kind = workshopKind(t);
+        const bonus = buildingLevelBonus(t);
         if (kind === WORKSHOP_KIND.FABLAB) {
-          goldGain += 1;
-          forceGain += 1;
-          cultureGain += SOFT_CULTURE;
-          innovationGain += 1;
+          goldGain += 1 + bonus;
+          forceGain += 1 + bonus;
+          cultureGain += SOFT_CULTURE + bonus;
+          innovationGain += 1 + bonus;
+          fablabGoldIncome += 1 + bonus;
+          fablabForceIncome += 1 + bonus;
+          fablabCultureIncome += SOFT_CULTURE + bonus;
+          fablabInnovationIncome += 1 + bonus;
           fablabCount += 1;
         } else if (kind === WORKSHOP_KIND.WASHI) {
-          goldGain += 1;
-          cultureGain += SOFT_CULTURE + 1;
-          washiGain += 1;
+          goldGain += 1 + bonus;
+          cultureGain += SOFT_CULTURE + 1 + bonus;
+          washiGain += 1 + bonus;
+          washiGoldIncome += 1 + bonus;
+          washiCultureIncome += SOFT_CULTURE + 1 + bonus;
+          washiIncome += 1 + bonus;
           washiWorkshopCount += 1;
         } else if (kind === WORKSHOP_KIND.POTTERY) {
-          goldGain += 2;
-          cultureGain += SOFT_CULTURE + 1;
-          potteryGain += 1;
+          goldGain += 2 + bonus;
+          cultureGain += SOFT_CULTURE + 1 + bonus;
+          potteryGain += 1 + bonus;
+          potteryGoldIncome += 2 + bonus;
+          potteryCultureIncome += SOFT_CULTURE + 1 + bonus;
+          potteryIncome += 1 + bonus;
           potteryWorkshopCount += 1;
         } else {
-          cultureGain += SOFT_CULTURE;
+          cultureGain += SOFT_CULTURE + bonus;
+          genericWorkshopCultureIncome += SOFT_CULTURE + bonus;
           genericWorkshopCount += 1;
         }
       }
       if (t.type === TYPE.JINJA || t.type === TYPE.TERA) {
-        cultureGain += SOFT_CULTURE;
+        const bonus = buildingLevelBonus(t);
+        cultureGain += SOFT_CULTURE + bonus;
+        shrineTempleCultureIncome += SOFT_CULTURE + bonus;
         if (t.type === TYPE.JINJA) shrineCount += 1;
         if (t.type === TYPE.TERA) templeCount += 1;
       }
@@ -2198,13 +2465,13 @@ function passive(playerIndex) {
 
   const details = [];
   if (plainCount > 0) details.push(`平地x${plainCount}(食料+${plainCount})`);
-  if (portCount > 0) details.push(`港x${portCount}(金+${portCount * 2})`);
-  if (fishingPortCount > 0) details.push(`漁港x${fishingPortCount}(食料+${fishingPortCount})`);
-  if (fablabCount > 0) details.push(`ファブラボx${fablabCount}(金+${fablabCount} 武力+${fablabCount} 文化+${SOFT_CULTURE * fablabCount} 機会+${fablabCount})`);
-  if (washiWorkshopCount > 0) details.push(`和紙工房x${washiWorkshopCount}(金+${washiWorkshopCount} 文化+${(SOFT_CULTURE + 1) * washiWorkshopCount} 和紙+${washiWorkshopCount})`);
-  if (potteryWorkshopCount > 0) details.push(`陶芸工房x${potteryWorkshopCount}(金+${potteryWorkshopCount * 2} 文化+${(SOFT_CULTURE + 1) * potteryWorkshopCount} 陶器+${potteryWorkshopCount})`);
-  if (genericWorkshopCount > 0) details.push(`工房x${genericWorkshopCount}(文化+${SOFT_CULTURE * genericWorkshopCount})`);
-  if (shrineCount + templeCount > 0) details.push(`寺社x${shrineCount + templeCount}(文化+${SOFT_CULTURE * (shrineCount + templeCount)})`);
+  if (portCount > 0) details.push(`港x${portCount}(金+${portGoldIncome})`);
+  if (fishingPortCount > 0) details.push(`漁港x${fishingPortCount}(食料+${fishingFoodIncome})`);
+  if (fablabCount > 0) details.push(`ファブラボx${fablabCount}(金+${fablabGoldIncome} 武力+${fablabForceIncome} 文化+${fablabCultureIncome} 機会+${fablabInnovationIncome})`);
+  if (washiWorkshopCount > 0) details.push(`和紙工房x${washiWorkshopCount}(和紙+${washiIncome} / 和紙献上で金+${washiGoldIncome} / 文化+${washiCultureIncome})`);
+  if (potteryWorkshopCount > 0) details.push(`陶芸工房x${potteryWorkshopCount}(陶器+${potteryIncome} / 陶器献上で金+${potteryGoldIncome} / 文化+${potteryCultureIncome})`);
+  if (genericWorkshopCount > 0) details.push(`工房x${genericWorkshopCount}(文化+${genericWorkshopCultureIncome})`);
+  if (shrineCount + templeCount > 0) details.push(`寺社x${shrineCount + templeCount}(文化+${shrineTempleCultureIncome})`);
   if (popFoodGain + popGoldGain + popCultureGain + popForceGain > 0) details.push(`人口収益(食料+${popFoodGain} 金+${popGoldGain} 文化+${popCultureGain} 武力+${popForceGain})`);
   if (popPhase.demand > 0) details.push(`人口扶養(食料-${popPhase.demand})`);
   if (popPhase.growth > 0) details.push(`人口成長+${popPhase.growth}`);
@@ -2225,8 +2492,8 @@ function spreadCulture(playerId) {
       if (t.owner !== playerId) continue;
 
       const power = t.type === TYPE.KOBO ? workshopCulturePower(t) :
-                    (t.type === TYPE.JINJA || t.type === TYPE.TERA) ? 4 :
-                    t.type === TYPE.JO ? 2 :
+                    (t.type === TYPE.JINJA || t.type === TYPE.TERA) ? 4 + buildingLevelBonus(t) :
+                    t.type === TYPE.JO ? 2 + buildingLevelBonus(t) :
                     t.type === TYPE.YAMA ? 2 : 1;
       const shrineSeason = (t.type === TYPE.JINJA || t.type === TYPE.TERA) ? seasonState.shrineSpreadBonus : 0;
       const finalPower = max(1, power - 1 + harmonyBonus + shrineSeason);
@@ -2249,7 +2516,7 @@ function checkCultureFlipByPlayer(playerId) {
       if (t.type === TYPE.UMI) continue;
       const a = t.inf[playerId] || 0;
       const b = maxOpponentInfluence(t, playerId);
-      const resist = t.type === TYPE.JO ? CASTLE_FLIP_RESIST : 0;
+      const resist = t.type === TYPE.JO ? CASTLE_FLIP_RESIST + buildingLevelBonus(t) : 0;
       const flipNeed = CULTURE_FLIP + resist;
       const dominateNeed = CULTURE_DOMINATE + resist;
       if (a >= flipNeed && a >= b + dominateNeed) {
@@ -2262,7 +2529,7 @@ function checkCultureFlipByPlayer(playerId) {
         t.owner = playerId;
         resetTileInfluence(t);
         capturePopulationLoss(t);
-        if (t.type === TYPE.JO) t.castleHp = CASTLE_SIEGE_HITS;
+        if (t.type === TYPE.JO) t.castleHp = castleMaxHp(t);
         flipCapturesThisTurn[playerId] += 1;
         latestComment = gainComment(playerId, t, "文化転向");
         const fxText = playerId === HUMAN_PLAYER_ID ? "文化獲得" : "敵が獲得";
@@ -2362,7 +2629,7 @@ function aiTurn(aiIndex) {
     if (owned.length === 0) break;
 
     if (eventReadyThisTurn[aiId] && !eventUsedByPlayer[aiId] && random() < 0.45) {
-      const card = drawEventCard();
+      const card = drawEventCard(ai);
       applyEvent(card, ai, owned[0], false);
       discard.push(card);
       eventUsedByPlayer[aiId] = true;
@@ -2394,6 +2661,18 @@ function aiTurn(aiIndex) {
       if (gain.food > 0) ai.food += gain.food;
       pushTileFx(base.c, base.r, `敵金+${gain.gold}`, color(100, 180, 255));
       logs.push(`交易:+${gain.gold}${gain.food > 0 ? ` 食料+${gain.food}` : ""}`);
+      spendAction(aiId);
+      continue;
+    }
+
+    if (canUpgradeBuilding(base, aiId) && ai.gold >= upgradeCost(base) && random() < 0.35) {
+      const cost = upgradeCost(base);
+      ai.gold -= cost;
+      base.level = buildingLevel(base) + 1;
+      if (base.type === TYPE.JO) base.castleHp = castleMaxHp(base);
+      base.population = min(populationCap(base), max(base.population || 0, initialPopulationForType(base.type) + buildingLevelBonus(base)));
+      pushTileFx(base.c, base.r, `敵Lv${buildingLevel(base)}`, color(78, 176, 126));
+      logs.push(`改修:${tileLabel(base)} Lv${buildingLevel(base)}`);
       spendAction(aiId);
       continue;
     }
@@ -2598,7 +2877,7 @@ function setOwner(playerId, c, r) {
   if (t.type === TYPE.UMI) return;
   t.owner = playerId;
   resetTileInfluence(t);
-  if (t.type === TYPE.JO) t.castleHp = CASTLE_SIEGE_HITS;
+  normalizeTileBuildingState(t);
 }
 
 function ownerName(ownerId) {
@@ -2636,12 +2915,13 @@ function tileRoleTitle(tileOrType) {
 
 function tileRoleDetail(tile, playerId) {
   if (!tile) return "";
-  const popText = `人口${tile.population || 0}/${populationCap(tile)}。`;
+  const levelText = supportsBuildingLevel(tile) ? `Lv${buildingLevel(tile)}。` : "";
+  const popText = `${levelText}人口${tile.population || 0}/${populationCap(tile)}。`;
   if (tile.type === TYPE.UMI) {
     return "海域: 占領・建設不可。港を押さえると海上交易の利益を得られる。";
   }
   if (tile.type === TYPE.JINJA) {
-    return `${popText} 文化振興: 文化+4。実行時に隣接へ影響力+${SHRINE_CULTURE_PULSE}。`;
+    return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。実行時に隣接へ影響力+${SHRINE_CULTURE_PULSE}。Lvごとに常時文化伝播も強くなる。`;
   }
   if (tile.type === TYPE.KOBO) {
     const bonus = tradeWorkshopBonus(playerId);
@@ -2658,20 +2938,21 @@ function tileRoleDetail(tile, playerId) {
     return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。交易に工房ボーナス+${bonus}（最大+${WORKSHOP_TRADE_BONUS_CAP}）。`;
   }
   if (tile.type === TYPE.JO) {
-    const hp = tile.castleHp > 0 ? tile.castleHp : CASTLE_SIEGE_HITS;
-    return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY}必要。攻城${CASTLE_SIEGE_HITS}回で陥落（耐久${hp}/${CASTLE_SIEGE_HITS}）。文化転向に耐性+${CASTLE_FLIP_RESIST}。`;
+    const hpMax = castleMaxHp(tile);
+    const hp = tile.castleHp > 0 ? tile.castleHp : hpMax;
+    return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY + buildingLevelBonus(tile)}必要。攻城${hpMax}回で陥落（耐久${hp}/${hpMax}）。文化転向に耐性+${CASTLE_FLIP_RESIST + buildingLevelBonus(tile)}。`;
   }
   if (tile.type === TYPE.YAMA) {
     return `${popText} 攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
   }
   if (tile.type === TYPE.MINATO) {
     if (isFishingPort(tile)) {
-      return `${popText} 漁港: 毎ターン食料+1。交易で金+4・食料+2。工房を持つと交易金がさらに伸びる。`;
+      return `${popText} 漁港: 毎ターン食料+${1 + buildingLevelBonus(tile)}。交易で金+${4 + buildingLevelBonus(tile)}・食料+${2 + buildingLevelBonus(tile)}。工房を持つと交易金がさらに伸びる。`;
     }
-    return `${popText} 港: 毎ターン金+2。交易で金+6。工房を持つとさらに伸びる。`;
+    return `${popText} 港: 毎ターン金+${2 + buildingLevelBonus(tile)}。交易で金+${6 + buildingLevelBonus(tile) * 2}。工房を持つとさらに伸びる。`;
   }
   if (tile.type === TYPE.TERA) {
-    return `${popText} 文化振興: 文化+4。神社と合わせると文化伝播が強化。`;
+    return `${popText} 文化振興: 文化+${cultureActionGain(tile)}。神社と合わせると文化伝播が強化。`;
   }
   return `${popText} 平地: 特殊効果なし。食料収入の基盤。金${BUILD_CASTLE_COST}で築城、金${BUILD_WORKSHOP_COST}で工房建設が可能（山でも可）。`;
 }
