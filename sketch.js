@@ -7,7 +7,7 @@ const COLS = 14;
 const ROWS = 9;
 
 // ---------- ヘックス設定 (pointy-top) ----------
-const HEX_SIZE = 30;
+const HEX_SIZE = 60;
 const HEX_W = Math.sqrt(3) * HEX_SIZE;
 const HEX_H = 2 * HEX_SIZE;
 const HEX_VSTEP = 1.5 * HEX_SIZE;
@@ -20,6 +20,9 @@ const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
 const ASSET_REV = "20260419c";
+const TILE_NAME_W = 96;
+const TILE_NAME_H = 24;
+const TILE_NAME_FONT = 14;
 
 // ---------- UI ----------
 const UI_W = 320;
@@ -2237,15 +2240,15 @@ function drawHexGrid() {
 
       fill(20);
       textAlign(CENTER, CENTER);
-      textSize(14);
+      textSize(24);
       if (t.type !== TYPE.HEICHI) {
         drawIsoStructure(t, isoCtr.x, tileGroundY, HEX_SIZE * 0.62);
         if (t.type !== TYPE.UMI) {
-          textSize(9);
+          textSize(TILE_NAME_FONT);
           fill(12, 20, 28, 215);
-          rect(isoCtr.x - 26, isoCtr.y + isoTileMetrics(1).depth * 0.5, 52, 15, 6);
+          rect(isoCtr.x - TILE_NAME_W / 2, isoCtr.y + isoTileMetrics(1).depth * 0.5, TILE_NAME_W, TILE_NAME_H, 8);
           fill(247, 243, 233);
-          text(tileLabel(t), isoCtr.x, isoCtr.y + isoTileMetrics(1).depth * 0.5 + 7);
+          text(tileLabel(t), isoCtr.x, isoCtr.y + isoTileMetrics(1).depth * 0.5 + TILE_NAME_H / 2);
         }
       }
 
