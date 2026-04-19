@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260419b";
+const ASSET_REV = "20260419c";
 
 // ---------- UI ----------
 const UI_W = 320;
