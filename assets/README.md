@@ -2,26 +2,39 @@
 
 このディレクトリは、手描きフォールバックを置き換えるための画像差し込み口です。
 
+## 現在入っている画像
+
+- `structure-sheet.png`
+- `structure-castle.png`
+- `structure-shrine.png`
+- `structure-temple.png`
+- `structure-port.png`
+- `structure-mountain.png`
+- `structure-workshop.png`
+- `structure-workshop-fablab.png`
+- `structure-workshop-washi.png`
+- `structure-workshop-pottery.png`
+
 ## 想定ファイル
 
 - `terrain-sea.webp`
 - `terrain-plains.webp`
 - `terrain-mountain.webp`
-- `structure-port.webp`
-- `structure-castle.webp`
-- `structure-shrine.webp`
-- `structure-temple.webp`
-- `structure-workshop.webp`
-- `structure-workshop-fablab.webp`
-- `structure-workshop-washi.webp`
-- `structure-workshop-pottery.webp`
-- `structure-mountain.webp`
+- `structure-port.png`
+- `structure-castle.png`
+- `structure-shrine.png`
+- `structure-temple.png`
+- `structure-workshop.png`
+- `structure-workshop-fablab.png`
+- `structure-workshop-washi.png`
+- `structure-workshop-pottery.png`
+- `structure-mountain.png`
 
 ## 使い方
 
 - ファイルが存在すれば `sketch.js` が自動で読み込みます。
 - ファイルが無ければ現在の p5 手描き描画に戻ります。
-- 推奨形式は `webp`、透過あり、1枚ごとの長辺は `1024px` 前後です。
+- 推奨形式は `png` か `webp`、透過あり、1枚ごとの長辺は `1024px` 前後です。
 - 地形画像はヘックス形状にクリップされます。
 - 建物画像は中央下寄せで配置されるので、被写体は画像下側に寄せてください。
 
