@@ -114,6 +114,25 @@ const CLAN_THEMES = {
   },
 };
 
+const ART_SPRITES = {
+  terrain: {
+    sea: { path: "assets/terrain-sea.webp", alpha: 160, scale: 1.04 },
+    plains: { path: "assets/terrain-plains.webp", alpha: 150, scale: 1.02 },
+    mountain: { path: "assets/terrain-mountain.webp", alpha: 175, scale: 1.05 },
+  },
+  structures: {
+    port: { path: "assets/structure-port.webp", scale: 1.24, anchorY: 0.72 },
+    castle: { path: "assets/structure-castle.webp", scale: 1.3, anchorY: 0.78 },
+    shrine: { path: "assets/structure-shrine.webp", scale: 1.2, anchorY: 0.76 },
+    temple: { path: "assets/structure-temple.webp", scale: 1.22, anchorY: 0.76 },
+    workshop: { path: "assets/structure-workshop.webp", scale: 1.18, anchorY: 0.76 },
+    workshopFablab: { path: "assets/structure-workshop-fablab.webp", scale: 1.18, anchorY: 0.76 },
+    workshopWashi: { path: "assets/structure-workshop-washi.webp", scale: 1.18, anchorY: 0.76 },
+    workshopPottery: { path: "assets/structure-workshop-pottery.webp", scale: 1.18, anchorY: 0.76 },
+    mountain: { path: "assets/structure-mountain.webp", scale: 1.16, anchorY: 0.8 },
+  },
+};
+
 // ---------- 迥ｶ諷・----------
 let grid = [];
 let centers = [];
@@ -175,6 +194,13 @@ let soundtrack = {
   button: { x: 0, y: 0, w: 124, h: 28 },
 };
 let startPickPopup = { open: true };
+let artLibrary = {
+  status: "idle",
+  total: 0,
+  loaded: 0,
+  failed: 0,
+  images: {},
+};
 
 // 盤面のズーム/パン（将来拡張）
 let boardX = 18;
@@ -183,6 +209,152 @@ let camera = { x: 0, y: 0, zoom: 1 };
 let cameraShake = { framesLeft: 0, strength: 0 };
 
 // 山越え効果ターン
+
+function collectArtSpriteDefs() {
+  const defs = [];
+  for (const groupName of Object.keys(ART_SPRITES)) {
+    const group = ART_SPRITES[groupName];
+    for (const key of Object.keys(group)) {
+      defs.push({
+        id: `${groupName}.${key}`,
+        group: groupName,
+        key,
+        ...group[key],
+      });
+    }
+  }
+  return defs;
+}
+
+function initArtLibrary() {
+  const defs = collectArtSpriteDefs();
+  artLibrary = {
+    status: defs.length ? "loading" : "idle",
+    total: defs.length,
+    loaded: 0,
+    failed: 0,
+    images: {},
+  };
+  defs.forEach((def) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      artLibrary.loaded += 1;
+      artLibrary.images[def.id] = {
+        img,
+        ready: true,
+        failed: false,
+        ...def,
+      };
+      if (artLibrary.loaded + artLibrary.failed >= artLibrary.total) artLibrary.status = "ready";
+    };
+    img.onerror = () => {
+      artLibrary.failed += 1;
+      artLibrary.images[def.id] = {
+        img: null,
+        ready: false,
+        failed: true,
+        ...def,
+      };
+      if (artLibrary.loaded + artLibrary.failed >= artLibrary.total) artLibrary.status = "ready";
+    };
+    img.src = def.path;
+  });
+}
+
+function artEntry(id) {
+  return artLibrary.images[id] || null;
+}
+
+function structureArtId(tile) {
+  if (tile.type === TYPE.JO) return "structures.castle";
+  if (tile.type === TYPE.MINATO) return "structures.port";
+  if (tile.type === TYPE.JINJA) return "structures.shrine";
+  if (tile.type === TYPE.TERA) return "structures.temple";
+  if (tile.type === TYPE.YAMA) return "structures.mountain";
+  if (tile.type === TYPE.KOBO) {
+    const kind = workshopKind(tile);
+    if (kind === WORKSHOP_KIND.FABLAB) return "structures.workshopFablab";
+    if (kind === WORKSHOP_KIND.WASHI) return "structures.workshopWashi";
+    if (kind === WORKSHOP_KIND.POTTERY) return "structures.workshopPottery";
+    return "structures.workshop";
+  }
+  return null;
+}
+
+function terrainArtId(tile) {
+  if (tile.type === TYPE.UMI) return "terrain.sea";
+  if (tile.type === TYPE.YAMA) return "terrain.mountain";
+  return "terrain.plains";
+}
+
+function drawImageCover(img, x, y, w, h) {
+  const srcRatio = img.width / max(1, img.height);
+  const dstRatio = w / max(1, h);
+  let dw = w;
+  let dh = h;
+  let dx = x;
+  let dy = y;
+  if (srcRatio > dstRatio) {
+    dh = h;
+    dw = h * srcRatio;
+    dx = x - (dw - w) / 2;
+  } else {
+    dw = w;
+    dh = w / srcRatio;
+    dy = y - (dh - h) / 2;
+  }
+  image(img, dx, dy, dw, dh);
+}
+
+function clipToPolygon(points) {
+  const ctx = drawingContext;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  ctx.clip();
+}
+
+function drawTerrainArtOverlay(tile, pts) {
+  const entry = artEntry(terrainArtId(tile));
+  if (!entry || !entry.ready || !entry.img) return false;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const minX = min(...xs);
+  const maxX = max(...xs);
+  const minY = min(...ys);
+  const maxY = max(...ys);
+  const padX = (maxX - minX) * ((entry.scale || 1) - 1) * 0.5;
+  const padY = (maxY - minY) * ((entry.scale || 1) - 1) * 0.5;
+  push();
+  drawingContext.save();
+  clipToPolygon(pts);
+  tint(255, entry.alpha || 255);
+  drawImageCover(entry.img, minX - padX, minY - padY, (maxX - minX) + padX * 2, (maxY - minY) + padY * 2);
+  noTint();
+  drawingContext.restore();
+  pop();
+  return true;
+}
+
+function drawStructureArt(tile, x, y, size = 18) {
+  const id = structureArtId(tile);
+  if (!id) return false;
+  const entry = artEntry(id);
+  if (!entry || !entry.ready || !entry.img) return false;
+  const scale = entry.scale || 1;
+  const h = size * 2.55 * scale;
+  const w = h * (entry.img.width / max(1, entry.img.height));
+  const anchorY = entry.anchorY == null ? 0.76 : entry.anchorY;
+  push();
+  imageMode(CORNER);
+  tint(255, entry.alpha || 255);
+  image(entry.img, x - w / 2, y - h * anchorY, w, h);
+  noTint();
+  pop();
+  return true;
+}
 
 function setup() {
   const bounds = boardScreenBounds();
@@ -193,6 +365,7 @@ function setup() {
   canvas.parent("app");
 
   textFont('"BIZ UDPMincho", "Yu Mincho", "Hiragino Mincho ProN", serif');
+  initArtLibrary();
   initializeGame();
   openStartPickPopup();
 }
@@ -742,10 +915,12 @@ function drawWorkshopAnimation(tile, x, y, size) {
 function drawIsoStructure(tile, x, y, size = 18) {
   const t = tile.type;
   if (t === TYPE.UMI) {
+    if (drawStructureArt(tile, x, y + size * 0.12, size)) return;
     drawSeaPattern(x, y + size * 0.15, size * 0.9);
     return;
   }
   if (t === TYPE.YAMA) {
+    if (drawStructureArt(tile, x, y + size * 0.08, size)) return;
     push();
     noStroke();
     fill(150, 162, 175, 220);
@@ -756,6 +931,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.MINATO) {
+    if (drawStructureArt(tile, x, y + size * 0.08, size)) return;
     drawHarborPier(x, y + size * 0.12, size * 0.86, isFishingPort(tile));
     drawHarborBoat(x - size * 0.28, y + size * 0.18, size * 0.72);
     drawIsoPrism(x + size * 0.32, y - size * 0.05, size * 0.62, size * 0.42, size * 0.42, [214, 222, 236], [186, 197, 216], [168, 179, 198]);
@@ -769,11 +945,13 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.JO) {
+    if (drawStructureArt(tile, x, y + size * 0.04, size)) return;
     drawCastleStructure(tile, x, y, size);
     drawCastleAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.KOBO) {
+    if (drawStructureArt(tile, x, y + size * 0.04, size)) return;
     const kind = workshopKind(tile);
     drawIsoPrism(x, y + size * 0.14, size * 1.02, size * 0.62, size * 0.18, [158, 142, 126], [132, 118, 106], [120, 108, 98]);
     drawIsoPrism(x, y + size * 0.08, size * 0.9, size * 0.56, size * 0.56, [232, 196, 156], [205, 166, 126], [190, 152, 114]);
@@ -792,6 +970,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.TERA) {
+    if (drawStructureArt(tile, x, y + size * 0.04, size)) return;
     drawStoneSteps(x, y + size * 0.16, size, 3);
     drawIsoPrism(x, y + size * 0.08, size * 0.94, size * 0.58, size * 0.5, [236, 224, 208], [210, 195, 178], [196, 182, 166]);
     drawIsoRoof(x, y + size * 0.06, size * 1.15, size * 0.72, size * 0.5, [108, 90, 86], [64, 54, 52]);
@@ -804,6 +983,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.JINJA) {
+    if (drawStructureArt(tile, x, y + size * 0.04, size)) return;
     drawStoneSteps(x, y + size * 0.18, size * 0.92, 3);
     drawIsoPrism(x, y + size * 0.1, size * 0.86, size * 0.52, size * 0.46, [246, 232, 220], [224, 208, 194], [208, 192, 178]);
     drawIsoRoof(x, y + size * 0.09, size * 0.94, size * 0.54, size * 0.46, [190, 72, 66], [112, 46, 42]);
@@ -907,6 +1087,7 @@ function drawHexTileBase(tile, cx, cy, size) {
   drawPolygon(shadowPts);
   fill(terrainColor(tile.type));
   drawPolygon(pts);
+  drawTerrainArtOverlay(tile, pts);
   stroke(255, 255, 255, tile.type === TYPE.UMI ? 60 : 95);
   strokeWeight(1.1);
   line(pts[0].x, pts[0].y, pts[3].x, pts[3].y);
