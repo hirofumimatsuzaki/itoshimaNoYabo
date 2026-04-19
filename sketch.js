@@ -1959,7 +1959,7 @@ function drawRightPanel() {
   const meStat = playerById(HUMAN_PLAYER_ID);
   const rankLines = [meStat, ...players.filter((p) => p.id !== HUMAN_PLAYER_ID)].slice(0, 3);
   const enemyControl = round(maxEnemyControlRate(HUMAN_PLAYER_ID) * 100);
-  fill(58, 68, 76);
+  fill(40, 48, 56);
   textSize(11);
   for (let i = 0; i < rankLines.length; i++) {
     const p = rankLines[i];
@@ -1990,7 +1990,7 @@ function drawRightPanel() {
   textSize(12);
   text(`敵進捗: 支配率${enemyControl}% (勝利:${round(CONTROL_WIN_RATE * 100)}%)`, px + 28, tileInfoY + 132);
 
-  fill(70, 76, 82);
+  fill(48, 54, 62);
   textSize(11);
   const portCombo = hasPortWorkshopCombo(HUMAN_PLAYER_ID) ? "有効(交易+2)" : "未成立";
   const shrineCombo = hasShrineTempleCombo(HUMAN_PLAYER_ID) ? "有効(文化波及+1)" : "未成立";
@@ -2235,16 +2235,25 @@ class Button {
   contains(mx, my) { return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h; }
   draw(enabled = true) {
     const theme = clanTheme(HUMAN_PLAYER_ID);
+    const fillA = enabled ? color(252, 249, 242) : color(228, 232, 236);
+    const fillB = enabled ? themeColor(theme, "accentLight", 255) : color(210, 216, 222);
+    const borderCol = enabled ? themeColor(theme, "accentDark", 190) : color(150, 158, 168);
+    const labelCol = enabled ? color(18, 28, 40) : color(112, 120, 130);
     fillLinearGradientRect(this.x, this.y, this.w, this.h,
-      enabled ? themeColor(theme, "panelA") : color(240, 243, 248),
-      enabled ? themeColor(theme, "panelB") : color(226, 230, 236),
+      fillA,
+      fillB,
       false, 12);
-    stroke(enabled ? themeColor(theme, "accentDark", 150) : color(175, 185, 200));
-    strokeWeight(1.2);
+    stroke(borderCol);
+    strokeWeight(enabled ? 1.4 : 1.1);
     rect(this.x, this.y, this.w, this.h, 12);
+    if (enabled) {
+      stroke(255, 255, 255, 135);
+      strokeWeight(1);
+      line(this.x + 12, this.y + 8, this.x + this.w - 12, this.y + 8);
+    }
     drawUiIcon(this.iconKind, this.x + 14, this.y + this.h / 2, 8);
     noStroke();
-    fill(enabled ? color(28, 42, 58) : color(140));
+    fill(labelCol);
     textAlign(LEFT, CENTER);
     textSize(12);
     text(this.label, this.x + 28, this.y + this.h / 2);
