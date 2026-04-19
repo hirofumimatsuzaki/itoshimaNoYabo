@@ -17,7 +17,9 @@ const ISO_OFFSET_X = 54;
 const ISO_OFFSET_Y = 10;
 const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
-const ISO_TILE_DEPTH = HEX_SIZE * 0.34;
+const ISO_TILE_DEPTH = 0;
+const ISO_TILE_OVERLAP = 2.6;
+const ASSET_REV = "20260419b";
 
 // ---------- UI ----------
 const UI_W = 320;
@@ -119,20 +121,20 @@ const CLAN_THEMES = {
 
 const ART_SPRITES = {
   terrain: {
-    sea: { path: "assets/terrain-sea.png", alpha: 255, scale: 1.04 },
-    plains: { path: "assets/terrain-plains.png", alpha: 255, scale: 1.02 },
-    mountain: { path: "assets/terrain-mountain.png", alpha: 255, scale: 1.04 },
+    sea: { path: `assets/terrain-sea.png?v=${ASSET_REV}`, alpha: 255, scale: 1.04 },
+    plains: { path: `assets/terrain-plains.png?v=${ASSET_REV}`, alpha: 255, scale: 1.02 },
+    mountain: { path: `assets/terrain-mountain.png?v=${ASSET_REV}`, alpha: 255, scale: 1.04 },
   },
   structures: {
-    port: { path: "assets/structure-port.png", scale: 1.24, anchorY: 0.72 },
-    castle: { path: "assets/structure-castle.png", scale: 1.3, anchorY: 0.78 },
-    shrine: { path: "assets/structure-shrine.png", scale: 1.2, anchorY: 0.76 },
-    temple: { path: "assets/structure-temple.png", scale: 1.22, anchorY: 0.76 },
-    workshop: { path: "assets/structure-workshop.png", scale: 1.18, anchorY: 0.76 },
-    workshopFablab: { path: "assets/structure-workshop-fablab.png", scale: 1.18, anchorY: 0.76 },
-    workshopWashi: { path: "assets/structure-workshop-washi.png", scale: 1.18, anchorY: 0.76 },
-    workshopPottery: { path: "assets/structure-workshop-pottery.png", scale: 1.18, anchorY: 0.76 },
-    mountain: { path: "assets/structure-mountain.png", scale: 1.16, anchorY: 0.8 },
+    port: { path: `assets/structure-port.png?v=${ASSET_REV}`, scale: 1.24, anchorY: 0.72 },
+    castle: { path: `assets/structure-castle.png?v=${ASSET_REV}`, scale: 1.3, anchorY: 0.78 },
+    shrine: { path: `assets/structure-shrine.png?v=${ASSET_REV}`, scale: 1.2, anchorY: 0.76 },
+    temple: { path: `assets/structure-temple.png?v=${ASSET_REV}`, scale: 1.22, anchorY: 0.76 },
+    workshop: { path: `assets/structure-workshop.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
+    workshopFablab: { path: `assets/structure-workshop-fablab.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
+    workshopWashi: { path: `assets/structure-workshop-washi.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
+    workshopPottery: { path: `assets/structure-workshop-pottery.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
+    mountain: { path: `assets/structure-mountain.png?v=${ASSET_REV}`, scale: 1.16, anchorY: 0.8 },
   },
 };
 
@@ -1095,18 +1097,18 @@ function isoTileMetrics(scale = 1) {
   };
 }
 
-function isoTileTopPointsScreen(sx, sy, scale = 1) {
+function isoTileTopPointsScreen(sx, sy, scale = 1, grow = 0) {
   const m = isoTileMetrics(scale);
   return [
-    { x: sx, y: sy - m.h / 2 },
-    { x: sx + m.w / 2, y: sy },
-    { x: sx, y: sy + m.h / 2 },
-    { x: sx - m.w / 2, y: sy },
+    { x: sx, y: sy - m.h / 2 - grow },
+    { x: sx + m.w / 2 + grow, y: sy },
+    { x: sx, y: sy + m.h / 2 + grow },
+    { x: sx - m.w / 2 - grow, y: sy },
   ];
 }
 
-function isoTileRightFacePointsScreen(sx, sy, scale = 1) {
-  const top = isoTileTopPointsScreen(sx, sy, scale);
+function isoTileRightFacePointsScreen(sx, sy, scale = 1, grow = 0) {
+  const top = isoTileTopPointsScreen(sx, sy, scale, grow);
   const depth = isoTileMetrics(scale).depth;
   return [
     top[1],
@@ -1116,8 +1118,8 @@ function isoTileRightFacePointsScreen(sx, sy, scale = 1) {
   ];
 }
 
-function isoTileLeftFacePointsScreen(sx, sy, scale = 1) {
-  const top = isoTileTopPointsScreen(sx, sy, scale);
+function isoTileLeftFacePointsScreen(sx, sy, scale = 1, grow = 0) {
+  const top = isoTileTopPointsScreen(sx, sy, scale, grow);
   const depth = isoTileMetrics(scale).depth;
   return [
     top[2],
@@ -1132,17 +1134,13 @@ function drawIsoTileOutlineScreen(sx, sy, scale = 1) {
 }
 
 function drawIsoTileShadowScreen(sx, sy, scale = 1, alpha = 34) {
-  const top = isoTileTopPointsScreen(sx, sy, scale);
-  const shadowPts = top.map((p) => ({ x: p.x + 4, y: p.y + 8 }));
-  noStroke();
-  fill(30, 44, 60, alpha);
-  drawPolygon(shadowPts);
+  return;
 }
 
 function drawTerrainArtTile(tile, sx, sy, scale = 1) {
   const entry = artEntry(terrainArtId(tile));
   if (!entry || !entry.ready || !entry.img) return false;
-  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const top = isoTileTopPointsScreen(sx, sy, scale, ISO_TILE_OVERLAP);
   const xs = top.map((p) => p.x);
   const ys = top.map((p) => p.y);
   const minX = min(...xs);
@@ -1162,18 +1160,10 @@ function drawTerrainArtTile(tile, sx, sy, scale = 1) {
 }
 
 function drawIsoTerrainShell(tile, sx, sy, scale = 1) {
-  const top = isoTileTopPointsScreen(sx, sy, scale);
-  const right = isoTileRightFacePointsScreen(sx, sy, scale);
-  const left = isoTileLeftFacePointsScreen(sx, sy, scale);
+  const top = isoTileTopPointsScreen(sx, sy, scale, ISO_TILE_OVERLAP);
   const base = color(terrainColor(tile.type));
   const topCol = tile.type === TYPE.UMI ? color(74, 136, 176) : base;
-  const leftCol = lerpColor(topCol, color(44, 52, 60), 0.22);
-  const rightCol = lerpColor(topCol, color(18, 28, 36), 0.34);
   noStroke();
-  fill(leftCol);
-  drawPolygon(left);
-  fill(rightCol);
-  drawPolygon(right);
   fill(topCol);
   drawPolygon(top);
 }
@@ -4017,13 +4007,28 @@ function projectedHexPoints(cx, cy, size) {
   return hexVertices(cx, cy, size).map((p) => projectPoint(p.x, p.y));
 }
 
-function projectPoint(wx, wy) {
-  const dx = wx - boardX;
-  const dy = wy - boardY;
+function tileCoordFromWorldCenter(wx, wy) {
+  const r = round((wy - boardY - HEX_H / 2) / HEX_VSTEP);
+  const c = round((wx - boardX - HEX_W / 2 - (r % 2) * (HEX_W / 2)) / HEX_W);
   return {
-    x: boardX + ISO_OFFSET_X + dx + dy * ISO_SHEAR_X,
-    y: boardY + ISO_OFFSET_Y + dy * ISO_SCALE_Y,
+    c: constrain(c, 0, COLS - 1),
+    r: constrain(r, 0, ROWS - 1),
   };
+}
+
+function tileScreenCenter(c, r) {
+  const m = isoTileMetrics(1);
+  const originX = boardX + ISO_OFFSET_X + ROWS * (m.w / 2) + 18;
+  const originY = boardY + ISO_OFFSET_Y + 26;
+  return {
+    x: originX + (c - r) * (m.w / 2),
+    y: originY + (c + r) * (m.h / 2),
+  };
+}
+
+function projectPoint(wx, wy) {
+  const tile = tileCoordFromWorldCenter(wx, wy);
+  return tileScreenCenter(tile.c, tile.r);
 }
 
 function drawPolygon(pts) {
@@ -4048,9 +4053,7 @@ function boardScreenBounds() {
   let maxY = -1e9;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const cx = boardX + c * HEX_W + (r % 2) * (HEX_W / 2) + HEX_W / 2;
-      const cy = boardY + r * HEX_VSTEP + HEX_H / 2;
-      const ctr = projectPoint(cx, cy);
+      const ctr = tileScreenCenter(c, r);
       const top = isoTileTopPointsScreen(ctr.x, ctr.y, 1);
       const depth = isoTileMetrics(1).depth;
       for (const p of top) {
