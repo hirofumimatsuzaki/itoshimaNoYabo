@@ -2234,14 +2234,12 @@ class Button {
   }
   contains(mx, my) { return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h; }
   draw(enabled = true) {
-    const fillA = enabled ? color(255, 255, 255) : color(232, 236, 240);
-    const fillB = enabled ? color(248, 248, 248) : color(220, 224, 228);
+    const fillCol = enabled ? color(255, 255, 255) : color(232, 236, 240);
     const borderCol = enabled ? color(48, 56, 66) : color(150, 158, 168);
     const labelCol = enabled ? color(0, 0, 0) : color(112, 120, 130);
-    fillLinearGradientRect(this.x, this.y, this.w, this.h,
-      fillA,
-      fillB,
-      false, 12);
+    fill(fillCol);
+    noStroke();
+    rect(this.x, this.y, this.w, this.h, 12);
     stroke(borderCol);
     strokeWeight(enabled ? 1.4 : 1.1);
     rect(this.x, this.y, this.w, this.h, 12);
