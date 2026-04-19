@@ -72,10 +72,17 @@ const SHRINE_CULTURE_PULSE = 1;
 const WORKSHOP_TRADE_BONUS = 1;
 const WORKSHOP_TRADE_BONUS_CAP = 3;
 const ACTIONS_PER_TURN = 2;
+const RECRUIT_COST = 4;
 const SEASON_SPAN_TURNS = 3;
 let HUMAN_PLAYER_ID = 1;
 const POP_GROWTH_FOOD_STEP = 6;
 const MAX_POP_GROWTH_PER_TURN = 2;
+
+const OFFICER_NAME_POOL = {
+  1: ["宗像左近", "高祖玄蕃", "深江兵庫", "雷山内記", "二丈新八", "可也源三"],
+  2: ["怡土采女", "高田主水", "今宿織部", "波多江隼人", "周船寺兵部", "志登孫六"],
+  3: ["桜井主計", "引津将監", "芥屋大膳", "岐志玄朔", "野北又兵衛", "船越修理"],
+};
 
 // ---------- 迥ｶ諷・----------
 let grid = [];
@@ -334,6 +341,14 @@ function drawUiIcon(kind, x, y, size = 8) {
       const a = (TWO_PI / 6) * i;
       line(cos(a) * size * 0.72, sin(a) * size * 0.72, cos(a) * size * 1.05, sin(a) * size * 1.05);
     }
+  } else if (kind === "recruit") {
+    stroke(84, 90, 120);
+    fill(226, 232, 246);
+    ellipse(0, -size * 0.45, size * 0.9, size * 0.9);
+    noFill();
+    arc(0, size * 0.45, size * 1.7, size * 1.4, PI, TWO_PI);
+    line(size * 0.95, -size * 0.2, size * 1.45, -size * 0.2);
+    line(size * 1.2, -size * 0.45, size * 1.2, 0.05 * size);
   } else if (kind === "attack") {
     stroke(190, 70, 70);
     line(-size * 0.8, size * 0.8, size * 0.8, -size * 0.8);
@@ -683,6 +698,7 @@ function resourcePairs(p) {
     ["gold", p.gold],
     ["culture", p.culture],
     ["force", p.force],
+    ["recruit", officerCount(p)],
     ["washi", p.washi],
     ["pottery", p.pottery],
     ["innovation", p.innovation],
@@ -720,6 +736,7 @@ function buttonIconKind(label) {
   if (label.includes("築城")) return "castle";
   if (label.includes("工房")) return "workshop";
   if (label.includes("改修")) return "upgrade";
+  if (label.includes("登用")) return "recruit";
   if (label.includes("ターン終了")) return "end";
   return "action";
 }
@@ -765,11 +782,81 @@ function maxOpponentInfluence(tile, playerId) {
   return maxInf;
 }
 
+function clanOfficerPool(playerId) {
+  return [...(OFFICER_NAME_POOL[playerId] || [`在地武将${playerId}-1`, `在地武将${playerId}-2`])];
+}
+
+function officerCount(playerOrId) {
+  const p = typeof playerOrId === "object" ? playerOrId : playerById(playerOrId);
+  return p && Array.isArray(p.officers) ? p.officers.length : 0;
+}
+
+function officerLimit(playerId) {
+  return 2 + countOwnedType(playerId, TYPE.JO) + floor(totalPopulation(playerId) / 18);
+}
+
+function strongestOfficerStat(playerId, stat) {
+  const p = playerById(playerId);
+  if (!p || !p.officers || p.officers.length === 0) return 0;
+  return max(...p.officers.map((o) => o[stat] || 0));
+}
+
+function officerSummary(playerId) {
+  const p = playerById(playerId);
+  if (!p || officerCount(p) <= 0) return "武将なし";
+  const lead = [...p.officers].sort((a, b) => (b.valor + b.wit + b.admin) - (a.valor + a.wit + a.admin))[0];
+  return `${lead.name} ${lead.role} 武${lead.valor} 知${lead.wit} 政${lead.admin}`;
+}
+
+function officerBonuses(playerId) {
+  return {
+    culture: floor(strongestOfficerStat(playerId, "wit") / 4),
+    trade: floor(strongestOfficerStat(playerId, "admin") / 4),
+    forceTrain: floor(strongestOfficerStat(playerId, "valor") / 4),
+    attackDiscount: floor(strongestOfficerStat(playerId, "valor") / 5),
+    spread: floor(strongestOfficerStat(playerId, "wit") / 5),
+  };
+}
+
+function createOfficerFromTile(playerId, tile) {
+  const p = playerById(playerId);
+  if (!p) return null;
+  if (!p.officerPool || p.officerPool.length === 0) p.officerPool = clanOfficerPool(playerId);
+  const idx = floor(random(p.officerPool.length));
+  const baseName = p.officerPool.splice(idx, 1)[0];
+  const terrain = tile ? tile.type : TYPE.HEICHI;
+  let valor = 3 + floor(random(3));
+  let wit = 3 + floor(random(3));
+  let admin = 3 + floor(random(3));
+  if (terrain === TYPE.JO || terrain === TYPE.YAMA) valor += 2;
+  if (terrain === TYPE.MINATO || terrain === TYPE.KOBO) admin += 2;
+  if (terrain === TYPE.JINJA || terrain === TYPE.TERA) wit += 2;
+  if (terrain === TYPE.HEICHI) {
+    valor += 1;
+    admin += 1;
+  }
+  valor = constrain(valor, 1, 9);
+  wit = constrain(wit, 1, 9);
+  admin = constrain(admin, 1, 9);
+  const top = max(valor, wit, admin);
+  const role = top === valor ? "猛将" : top === wit ? "知将" : "奉行";
+  return {
+    id: `${playerId}-${++p.officerSeq}`,
+    name: baseName,
+    role,
+    valor,
+    wit,
+    admin,
+    loyalty: 6 + floor(random(4)),
+    origin: tile ? tileLabel(tile) : "本拠",
+  };
+}
+
 function initializeGame() {
   players = [
-    { name: "二丈軍", id: 1, food: 10, gold: 10, culture: 6, force: 3, washi: 0, pottery: 0, innovation: 0, col: color(56, 124, 255) },
-    { name: "伊都軍", id: 2, food: 10, gold: 10, culture: 6, force: 3, washi: 0, pottery: 0, innovation: 0, col: color(236, 96, 84) },
-    { name: "志摩軍", id: 3, food: 10, gold: 10, culture: 6, force: 3, washi: 0, pottery: 0, innovation: 0, col: color(90, 170, 118) },
+    { name: "二丈軍", id: 1, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(1), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(56, 124, 255) },
+    { name: "伊都軍", id: 2, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(2), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(236, 96, 84) },
+    { name: "志摩軍", id: 3, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(3), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(90, 170, 118) },
   ];
   currentPlayer = 0;
   turn = 1;
@@ -1341,7 +1428,8 @@ function drawRightPanel() {
   buttons[5].draw(playable && isPlayer && hasAction && isMine && canBuildCastleOnTile(t) && me.gold >= BUILD_CASTLE_COST);
   buttons[6].draw(playable && isPlayer && hasAction && isMine && canBuildWorkshopOnTile(t) && me.gold >= BUILD_WORKSHOP_COST);
   buttons[7].draw(playable && isPlayer && hasAction && isMine && canUpgradeBuilding(t, me.id) && me.gold >= upgradeCost(t));
-  buttons[8].draw(playable && isPlayer);
+  buttons[8].draw(playable && isPlayer && hasAction && isMine && me.gold >= RECRUIT_COST && officerCount(me) < officerLimit(me.id));
+  buttons[9].draw(playable && isPlayer);
 
   const meStat = playerById(HUMAN_PLAYER_ID);
   const rankLines = [meStat, ...players.filter((p) => p.id !== HUMAN_PLAYER_ID)].slice(0, 3);
@@ -1356,6 +1444,7 @@ function drawRightPanel() {
   const playerEventState = eventReadyThisTurn[HUMAN_PLAYER_ID] ? (eventUsedThisTurn ? "使用済" : "使用可") : "発生なし";
   text(`イベント:${playerEventState} / 交易:${tradeUsedThisTurn ? "使用済" : "未使用"}`, px + 18, py + 88);
   text(`行動: ${actionsLeft[HUMAN_PLAYER_ID]}/${ACTIONS_PER_TURN} / 文化転向: ${flipCapturesThisTurn[HUMAN_PLAYER_ID]}/${MAX_FLIPS_PER_PLAYER_TURN}`, px + 18, py + 104);
+  text(`武将: ${officerCount(HUMAN_PLAYER_ID)}/${officerLimit(HUMAN_PLAYER_ID)} / 先鋒: ${officerSummary(HUMAN_PLAYER_ID)}`, px + 18, py + 120, UI_W - 36, 30);
   const buttonsBottom = buttons.length > 0 ? buttons[buttons.length - 1].y + buttons[buttons.length - 1].h : py + 110;
   const tileInfoY = buttonsBottom + 20;
 
@@ -1379,7 +1468,8 @@ function drawRightPanel() {
   const portCombo = hasPortWorkshopCombo(HUMAN_PLAYER_ID) ? "有効(交易+2)" : "未成立";
   const shrineCombo = hasShrineTempleCombo(HUMAN_PLAYER_ID) ? "有効(文化波及+1)" : "未成立";
   const mountainCombo = hasMountainCastleCombo(HUMAN_PLAYER_ID) ? "有効(山城攻防+1)" : "未成立";
-  text(`季節: ${seasonState.name} (${seasonState.desc})\nコンボ: 港+工房 ${portCombo}\nコンボ: 寺+神社 ${shrineCombo}\nコンボ: 山+城 ${mountainCombo}`, px + 18, tileInfoY + 150);
+  const ob = officerBonuses(HUMAN_PLAYER_ID);
+  text(`季節: ${seasonState.name} (${seasonState.desc})\nコンボ: 港+工房 ${portCombo}\nコンボ: 寺+神社 ${shrineCombo}\nコンボ: 山+城 ${mountainCombo}\n武将補正: 文化+${ob.culture} / 交易+${ob.trade} / 軍備+${ob.forceTrain} / 攻撃軽減-${ob.attackDiscount}`, px + 18, tileInfoY + 150);
 }
 
 function drawBottomBar() {
@@ -1567,6 +1657,7 @@ function buildButtons() {
   buttons.push(new Button(px, py, bw, bh, `築城 (金${BUILD_CASTLE_COST})`, "castle", () => actionBuildCastle())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, `工房建設 (金${BUILD_WORKSHOP_COST})`, "workshop", () => actionBuildWorkshop())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, upgradeLabel, "upgrade", () => actionUpgradeBuilding())); py += bh + gap;
+  buttons.push(new Button(px, py, bw, bh, `武将登用 (金${RECRUIT_COST})`, "recruit", () => actionRecruitOfficer())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, "ターン終了", "end", () => actionEndTurn()));
 }
 
@@ -1658,13 +1749,14 @@ function workshopCulturePower(tile) {
 }
 
 function cultureActionGain(tile) {
+  const ownerBonus = tile && tile.owner ? officerBonuses(tile.owner).culture : 0;
   if (tile.type !== TYPE.KOBO) {
     const base = (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? 4 + buildingLevelBonus(tile) : 2;
     const seasonBonus = (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? seasonState.shrineCultureActionBonus : 0;
-    return base + seasonBonus;
+    return base + seasonBonus + ownerBonus;
   }
   const b = workshopActionBonus(tile);
-  return 3 + b.culture;
+  return 3 + b.culture + ownerBonus;
 }
 
 // ------------------ 陦悟虚 ------------------
@@ -1754,12 +1846,34 @@ function actionForce() {
   if (me.gold < 3) { message = "金が足りません (必要: 3)。"; return; }
 
   me.gold -= 3;
-  me.force += 3;
-  pushTileFx(t.c, t.r, "武力+3", color(235, 90, 80));
-  message = "軍備を増強しました (+3)。";
+  const bonus = officerBonuses(me.id).forceTrain;
+  me.force += 3 + bonus;
+  pushTileFx(t.c, t.r, `武力+${3 + bonus}`, color(235, 90, 80));
+  message = bonus > 0 ? `軍備を増強しました (+${3 + bonus}, 武将補正+${bonus})。` : "軍備を増強しました (+3)。";
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
+}
+
+function actionRecruitOfficer() {
+  if (!canPlayerAct()) return;
+  const me = players[currentPlayer];
+  const t = getTile(selected.c, selected.r);
+  if (t.owner !== me.id) { message = "自領の拠点を選んでください。"; return; }
+  if (me.gold < RECRUIT_COST) { message = `金が足りません (必要: ${RECRUIT_COST})。`; return; }
+  const limit = officerLimit(me.id);
+  if (officerCount(me) >= limit) {
+    message = `これ以上は抱えきれません。武将上限 ${limit} 名です。`;
+    return;
+  }
+  const officer = createOfficerFromTile(me.id, t);
+  if (!officer) { message = "登用候補がいません。"; return; }
+  me.gold -= RECRUIT_COST;
+  me.officers.push(officer);
+  pushTileFx(t.c, t.r, officer.role, color(124, 116, 208));
+  message = `武将を登用: ${officer.name} (${officer.role}) / 武${officer.valor} 知${officer.wit} 政${officer.admin} / 金-${RECRUIT_COST}`;
+  spendAction(me.id);
+  message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
 }
 
 function attackNeed(from, target, attackerId) {
@@ -1767,9 +1881,11 @@ function attackNeed(from, target, attackerId) {
   const penalty = target.type === TYPE.YAMA && !ignoreMountain ? 3 + seasonState.mountainAttackPenalty : 0;
   const castlePenalty = target.type === TYPE.JO ? CASTLE_DEFENSE_PENALTY + buildingLevelBonus(target) : 0;
   const defenderComboPenalty = (target.owner !== 0 && hasMountainCastleCombo(target.owner) && (target.type === TYPE.YAMA || target.type === TYPE.JO)) ? 1 : 0;
+  const officerDiscount = officerBonuses(attackerId).attackDiscount;
   const discount = (from.type === TYPE.JO ? CASTLE_ATTACK_DISCOUNT : 0)
     + (from.type === TYPE.YAMA ? MOUNTAIN_ATTACK_DISCOUNT : 0)
-    + ((hasMountainCastleCombo(attackerId) && (from.type === TYPE.JO || from.type === TYPE.YAMA)) ? 1 : 0);
+    + ((hasMountainCastleCombo(attackerId) && (from.type === TYPE.JO || from.type === TYPE.YAMA)) ? 1 : 0)
+    + officerDiscount;
   return max(1, FORCE_ATTACK + penalty + castlePenalty + defenderComboPenalty - discount);
 }
 
@@ -2304,7 +2420,8 @@ function tradeGain(playerId, tile) {
   const workshopBonus = tradeWorkshopBonus(playerId);
   const seasonGold = tileType === TYPE.MINATO ? seasonState.portTradeBonus : 0;
   const seasonFood = tileType === TYPE.MINATO && fishing ? seasonState.fishingFoodBonus : 0;
-  return { gold: base + combo + workshopBonus + seasonGold, food: (tileType === TYPE.MINATO && fishing ? 2 + levelBonus : 0) + seasonFood };
+  const officerTrade = officerBonuses(playerId).trade;
+  return { gold: base + combo + workshopBonus + seasonGold + officerTrade, food: (tileType === TYPE.MINATO && fishing ? 2 + levelBonus : 0) + seasonFood };
 }
 
 function tradeWorkshopBonus(playerId) {
@@ -2357,6 +2474,7 @@ function endTurn() {
 
 function passive(playerIndex) {
   const p = players[playerIndex];
+  const officerBoost = officerBonuses(p.id);
   let foodGain = 0, goldGain = 0, cultureGain = 0;
   let forceGain = 0, washiGain = 0, potteryGain = 0, innovationGain = 0;
   let popFoodGain = 0, popGoldGain = 0, popCultureGain = 0, popForceGain = 0;
@@ -2446,6 +2564,8 @@ function passive(playerIndex) {
   goldGain += popGoldGain;
   cultureGain += popCultureGain;
   forceGain += popForceGain;
+  goldGain += officerBoost.trade > 0 ? 1 : 0;
+  cultureGain += officerBoost.culture > 0 ? 1 : 0;
   p.food += foodGain;
   p.gold += goldGain;
   p.culture += cultureGain;
@@ -2472,6 +2592,7 @@ function passive(playerIndex) {
   if (potteryWorkshopCount > 0) details.push(`陶芸工房x${potteryWorkshopCount}(陶器+${potteryIncome} / 陶器献上で金+${potteryGoldIncome} / 文化+${potteryCultureIncome})`);
   if (genericWorkshopCount > 0) details.push(`工房x${genericWorkshopCount}(文化+${genericWorkshopCultureIncome})`);
   if (shrineCount + templeCount > 0) details.push(`寺社x${shrineCount + templeCount}(文化+${shrineTempleCultureIncome})`);
+  if (officerCount(p) > 0) details.push(`家臣団x${officerCount(p)}(金+${officerBoost.trade > 0 ? 1 : 0} 文化+${officerBoost.culture > 0 ? 1 : 0})`);
   if (popFoodGain + popGoldGain + popCultureGain + popForceGain > 0) details.push(`人口収益(食料+${popFoodGain} 金+${popGoldGain} 文化+${popCultureGain} 武力+${popForceGain})`);
   if (popPhase.demand > 0) details.push(`人口扶養(食料-${popPhase.demand})`);
   if (popPhase.growth > 0) details.push(`人口成長+${popPhase.growth}`);
@@ -2486,6 +2607,7 @@ function passive(playerIndex) {
 
 function spreadCulture(playerId) {
   const harmonyBonus = hasShrineTempleCombo(playerId) ? 1 : 0;
+  const officerSpreadBonus = officerBonuses(playerId).spread;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const t = grid[r][c];
@@ -2496,7 +2618,7 @@ function spreadCulture(playerId) {
                     t.type === TYPE.JO ? 2 + buildingLevelBonus(t) :
                     t.type === TYPE.YAMA ? 2 : 1;
       const shrineSeason = (t.type === TYPE.JINJA || t.type === TYPE.TERA) ? seasonState.shrineSpreadBonus : 0;
-      const finalPower = max(1, power - 1 + harmonyBonus + shrineSeason);
+      const finalPower = max(1, power - 1 + harmonyBonus + shrineSeason + officerSpreadBonus);
 
       for (const nt of neighbors6(c, r)) {
         const ignoreMountain = mountainPassTurns[playerId] > 0;
@@ -2653,6 +2775,18 @@ function aiTurn(aiIndex) {
       logs.push(`文化振興:+${gain}`);
       spendAction(aiId);
       continue;
+    }
+
+    if (ai.gold >= RECRUIT_COST && officerCount(ai) < officerLimit(aiId) && random() < 0.28) {
+      const officer = createOfficerFromTile(aiId, base);
+      if (officer) {
+        ai.gold -= RECRUIT_COST;
+        ai.officers.push(officer);
+        pushTileFx(base.c, base.r, "敵登用", color(142, 126, 214));
+        logs.push(`登用:${officer.name}`);
+        spendAction(aiId);
+        continue;
+      }
     }
 
     if (base.type === TYPE.MINATO) {
@@ -3063,16 +3197,3 @@ function winPopupRestartContains(mx, my) {
   const r = winPopupRestartRect();
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
