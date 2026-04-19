@@ -3,24 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>糸島・文化戦国</title>
+  <title>糸島の野望</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
   <script defer src="./sketch.js"></script>
   <style>
+    :root {
+      --paper: #efe6d3;
+      --ink: #233447;
+      --panel: #f7f3ea;
+      --accent: #82624a;
+    }
     html, body {
       margin: 0;
       padding: 0;
-      background: #f4f2ed;
-      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.55), transparent 38%),
+        linear-gradient(180deg, #d8d0bc 0%, #b7c7cf 100%);
+      color: var(--ink);
+      font-family: "BIZ UDPMincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
     }
     main {
       display: grid;
       place-items: center;
       min-height: 100vh;
+      padding: 24px;
     }
     canvas {
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-      border-radius: 12px;
+      box-shadow:
+        0 28px 70px rgba(25, 38, 52, 0.28),
+        0 4px 14px rgba(25, 38, 52, 0.12);
+      border-radius: 16px;
+      border: 1px solid rgba(72, 88, 104, 0.25);
     }
   </style>
 </head>
