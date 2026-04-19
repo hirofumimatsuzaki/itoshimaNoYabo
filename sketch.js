@@ -683,6 +683,13 @@ function drawCastleAnimation(tile, x, y, size) {
   fill(255, 220, 120, 120 + 40 * sin(frameCount * 0.1 + tile.c));
   ellipse(x - size * 0.12, y - size * 0.48, size * 0.12, size * 0.12);
   ellipse(x + size * 0.14, y - size * 0.54, size * 0.1, size * 0.1);
+  const officer = garrisonOfficer(tile);
+  if (officer) {
+    noStroke();
+    fill(255, 246, 228, 226);
+    ellipse(x - size * 0.58, y - size * 0.34, size * 0.28, size * 0.28);
+    drawClanCrestMark(ownerTheme.crest, x - size * 0.58, y - size * 0.34, size * 0.09, themeColor(ownerTheme, "accentDark"), 220);
+  }
 }
 
 function drawShrineAnimation(tile, x, y, size) {
@@ -1225,6 +1232,67 @@ function officerSummary(playerId) {
   return `${lead.name} ${lead.role} 武${lead.valor} 知${lead.wit} 政${lead.admin}`;
 }
 
+function officerById(playerId, officerId) {
+  const p = playerById(playerId);
+  if (!p || !p.officers) return null;
+  return p.officers.find((o) => o.id === officerId) || null;
+}
+
+function castleKey(tileOrCoords) {
+  const tile = tileOrCoords;
+  return tile ? `${tile.c},${tile.r}` : "";
+}
+
+function findCastleByKey(key) {
+  if (!key) return null;
+  const [c, r] = key.split(",").map((v) => parseInt(v, 10));
+  if (!Number.isInteger(c) || !Number.isInteger(r)) return null;
+  return getTile(c, r);
+}
+
+function garrisonOfficer(tile) {
+  if (!tile || tile.type !== TYPE.JO || !tile.garrisonOfficerId || !tile.owner) return null;
+  return officerById(tile.owner, tile.garrisonOfficerId);
+}
+
+function releaseOfficerAssignment(officer) {
+  if (!officer || !officer.assignedCastleKey) return;
+  const castle = findCastleByKey(officer.assignedCastleKey);
+  if (castle && castle.garrisonOfficerId === officer.id) castle.garrisonOfficerId = null;
+  officer.assignedCastleKey = null;
+}
+
+function assignOfficerToCastle(playerId, officer, castleTile) {
+  if (!castleTile || castleTile.type !== TYPE.JO || castleTile.owner !== playerId) return false;
+  const current = garrisonOfficer(castleTile);
+  if (current) current.assignedCastleKey = null;
+  castleTile.garrisonOfficerId = null;
+  if (!officer) return true;
+  if (officer.assignedCastleKey) {
+    const prevCastle = findCastleByKey(officer.assignedCastleKey);
+    if (prevCastle && prevCastle.garrisonOfficerId === officer.id) prevCastle.garrisonOfficerId = null;
+  }
+  officer.assignedCastleKey = castleKey(castleTile);
+  castleTile.garrisonOfficerId = officer.id;
+  return true;
+}
+
+function castleDefenseBonus(tile) {
+  const officer = garrisonOfficer(tile);
+  return officer ? ceil(officer.valor / 2) : 0;
+}
+
+function castleFlipBonus(tile) {
+  const officer = garrisonOfficer(tile);
+  return officer ? max(1, floor(max(officer.wit, officer.admin) / 3)) : 0;
+}
+
+function freeOfficerCount(playerId) {
+  const p = playerById(playerId);
+  if (!p || !p.officers) return 0;
+  return p.officers.filter((o) => !o.assignedCastleKey).length;
+}
+
 function officerBonuses(playerId) {
   return {
     culture: floor(strongestOfficerStat(playerId, "wit") / 4),
@@ -1265,6 +1333,7 @@ function createOfficerFromTile(playerId, tile) {
     wit,
     admin,
     loyalty: 6 + floor(random(4)),
+    assignedCastleKey: null,
     origin: tile ? tileLabel(tile) : "本拠",
   };
 }
@@ -1607,6 +1676,7 @@ function makeTile(c, r, type, name) {
     inf,
     level,
     castleHp: type === TYPE.JO ? castleMaxHp({ type, level }) : 0,
+    garrisonOfficerId: null,
     population: initialPopulationForType(type),
   };
 }
@@ -1652,6 +1722,7 @@ function normalizeTileBuildingState(tile) {
     tile.castleHp = constrain(tile.castleHp || castleMaxHp(tile), 0, castleMaxHp(tile));
   } else {
     tile.castleHp = 0;
+    tile.garrisonOfficerId = null;
   }
 }
 
@@ -2043,7 +2114,8 @@ function drawRightPanel() {
   buttons[6].draw(playable && isPlayer && hasAction && isMine && canBuildWorkshopOnTile(t) && me.gold >= BUILD_WORKSHOP_COST);
   buttons[7].draw(playable && isPlayer && hasAction && isMine && canUpgradeBuilding(t, me.id) && me.gold >= upgradeCost(t));
   buttons[8].draw(playable && isPlayer && hasAction && isMine && me.gold >= RECRUIT_COST && officerCount(me) < officerLimit(me.id));
-  buttons[9].draw(playable && isPlayer);
+  buttons[9].draw(playable && isPlayer && hasAction && isMine && t.type === TYPE.JO && officerCount(me) > 0);
+  buttons[10].draw(playable && isPlayer);
 
   const meStat = playerById(HUMAN_PLAYER_ID);
   const rankLines = [meStat, ...players.filter((p) => p.id !== HUMAN_PLAYER_ID)].slice(0, 3);
@@ -2061,6 +2133,7 @@ function drawRightPanel() {
   text(`武将: ${officerCount(HUMAN_PLAYER_ID)}/${officerLimit(HUMAN_PLAYER_ID)} / 先鋒: ${officerSummary(HUMAN_PLAYER_ID)}`, px + 28, py + 140, UI_W - 56, 30);
   text(`勅命: ${missionStatusText(HUMAN_PLAYER_ID)}`, px + 28, py + 172, UI_W - 56, 30);
   text(`産物: 和紙${meStat.washi} / 陶器${meStat.pottery} / 機会${meStat.innovation}`, px + 28, py + 196, UI_W - 56, 18);
+  text(`守将待機: ${freeOfficerCount(HUMAN_PLAYER_ID)}名`, px + 28, py + 212, UI_W - 56, 18);
   const buttonsBottom = buttons.length > 0 ? buttons[buttons.length - 1].y + buttons[buttons.length - 1].h : py + 110;
   const tileInfoY = buttonsBottom + 20;
 
@@ -2072,12 +2145,17 @@ function drawRightPanel() {
   text(`所有: ${ownerName(t.owner)}`, px + 28, tileInfoY + 44);
   text(`影響力: 二丈${t.inf[1] || 0} / 伊都${t.inf[2] || 0} / 志摩${t.inf[3] || 0}`, px + 28, tileInfoY + 66);
   text(`役割: ${tileRoleTitle(t)}`, px + 28, tileInfoY + 88);
+  if (t.type === TYPE.JO) {
+    const guard = garrisonOfficer(t);
+    const guardText = guard ? `守将: ${guard.name} 武${guard.valor} 知${guard.wit} 政${guard.admin}` : "守将: 未配置";
+    text(guardText, px + 28, tileInfoY + 104, UI_W - 56, 18);
+  }
   textSize(11);
-  text(tileRoleDetail(t, me.id), px + 28, tileInfoY + 106, UI_W - 56, 46);
+  text(tileRoleDetail(t, me.id), px + 28, tileInfoY + (t.type === TYPE.JO ? 124 : 106), UI_W - 56, 46);
 
   fill(150, 56, 52);
   textSize(12);
-  text(`敵進捗: 支配率${enemyControl}% (勝利:${round(CONTROL_WIN_RATE * 100)}%)`, px + 28, tileInfoY + 132);
+  text(`敵進捗: 支配率${enemyControl}% (勝利:${round(CONTROL_WIN_RATE * 100)}%)`, px + 28, tileInfoY + 150);
 
   fill(48, 54, 62);
   textSize(11);
@@ -2085,7 +2163,7 @@ function drawRightPanel() {
   const shrineCombo = hasShrineTempleCombo(HUMAN_PLAYER_ID) ? "有効(文化波及+1)" : "未成立";
   const mountainCombo = hasMountainCastleCombo(HUMAN_PLAYER_ID) ? "有効(山城攻防+1)" : "未成立";
   const ob = officerBonuses(HUMAN_PLAYER_ID);
-  text(`季節: ${seasonState.name} (${seasonState.desc})\nコンボ: 港+工房 ${portCombo}\nコンボ: 寺+神社 ${shrineCombo}\nコンボ: 山+城 ${mountainCombo}\n武将補正: 文化+${ob.culture} / 交易+${ob.trade} / 軍備+${ob.forceTrain} / 攻撃軽減-${ob.attackDiscount}`, px + 28, tileInfoY + 150, UI_W - 56, 110);
+  text(`季節: ${seasonState.name} (${seasonState.desc})\nコンボ: 港+工房 ${portCombo}\nコンボ: 寺+神社 ${shrineCombo}\nコンボ: 山+城 ${mountainCombo}\n武将補正: 文化+${ob.culture} / 交易+${ob.trade} / 軍備+${ob.forceTrain} / 攻撃軽減-${ob.attackDiscount}`, px + 28, tileInfoY + 168, UI_W - 56, 110);
 }
 
 function drawBottomBar() {
@@ -2313,6 +2391,7 @@ function buildButtons() {
   buttons.push(new Button(px, py, bw, bh, `工房建設 (金${BUILD_WORKSHOP_COST})`, "workshop", () => actionBuildWorkshop())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, upgradeLabel, "upgrade", () => actionUpgradeBuilding())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, `武将登用 (金${RECRUIT_COST})`, "recruit", () => actionRecruitOfficer())); py += bh + gap;
+  buttons.push(new Button(px, py, bw, bh, "守将配置", "castle", () => actionAssignCastleOfficer())); py += bh + gap;
   buttons.push(new Button(px, py, bw, bh, "ターン終了", "end", () => actionEndTurn()));
 }
 
@@ -2550,10 +2629,31 @@ function actionRecruitOfficer() {
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
 }
 
+function actionAssignCastleOfficer() {
+  if (!canPlayerAct()) return;
+  const me = players[currentPlayer];
+  const t = getTile(selected.c, selected.r);
+  if (t.owner !== me.id || t.type !== TYPE.JO) { message = "自領の城を選んでください。"; return; }
+  if (!me.officers || me.officers.length === 0) { message = "配置できる武将がいません。"; return; }
+  const roster = [null, ...me.officers];
+  const currentId = t.garrisonOfficerId;
+  const currentIndex = roster.findIndex((o) => (o ? o.id : null) === currentId);
+  const nextIndex = (currentIndex + 1 + roster.length) % roster.length;
+  const nextOfficer = roster[nextIndex];
+  assignOfficerToCastle(me.id, nextOfficer, t);
+  const defense = CASTLE_DEFENSE_PENALTY + buildingLevelBonus(t) + castleDefenseBonus(t);
+  const flipResist = CASTLE_FLIP_RESIST + buildingLevelBonus(t) + castleFlipBonus(t);
+  message = nextOfficer
+    ? `守将配置: ${nextOfficer.name}を${tileLabel(t)}に配置 / 防衛+${defense} / 文化耐性+${flipResist}`
+    : `守将配置を解除: ${tileLabel(t)} を空き城に戻しました。`;
+  spendAction(me.id);
+  message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+}
+
 function attackNeed(from, target, attackerId) {
   const ignoreMountain = mountainPassTurns[attackerId] > 0;
   const penalty = target.type === TYPE.YAMA && !ignoreMountain ? 3 + seasonState.mountainAttackPenalty : 0;
-  const castlePenalty = target.type === TYPE.JO ? CASTLE_DEFENSE_PENALTY + buildingLevelBonus(target) : 0;
+  const castlePenalty = target.type === TYPE.JO ? CASTLE_DEFENSE_PENALTY + buildingLevelBonus(target) + castleDefenseBonus(target) : 0;
   const defenderComboPenalty = (target.owner !== 0 && hasMountainCastleCombo(target.owner) && (target.type === TYPE.YAMA || target.type === TYPE.JO)) ? 1 : 0;
   const officerDiscount = officerBonuses(attackerId).attackDiscount;
   const discount = (from.type === TYPE.JO ? CASTLE_ATTACK_DISCOUNT : 0)
@@ -2777,6 +2877,11 @@ function handleAttackTargetClick(c, r) {
     }
   }
 
+  if (target.type === TYPE.JO) {
+    const prevOfficer = garrisonOfficer(target);
+    if (prevOfficer) prevOfficer.assignedCastleKey = null;
+    target.garrisonOfficerId = null;
+  }
   target.owner = me.id;
   resetTileInfluence(target);
   capturePopulationLoss(target);
@@ -3323,7 +3428,7 @@ function checkCultureFlipByPlayer(playerId) {
       if (t.type === TYPE.UMI) continue;
       const a = t.inf[playerId] || 0;
       const b = maxOpponentInfluence(t, playerId);
-      const resist = t.type === TYPE.JO ? CASTLE_FLIP_RESIST + buildingLevelBonus(t) : 0;
+      const resist = t.type === TYPE.JO ? CASTLE_FLIP_RESIST + buildingLevelBonus(t) + castleFlipBonus(t) : 0;
       const flipNeed = CULTURE_FLIP + resist;
       const dominateNeed = CULTURE_DOMINATE + resist;
       if (a >= flipNeed && a >= b + dominateNeed) {
@@ -3332,6 +3437,11 @@ function checkCultureFlipByPlayer(playerId) {
         if (flipCapturesThisTurn[playerId] >= MAX_FLIPS_PER_PLAYER_TURN) {
           blockedByCap = true;
           continue;
+        }
+        if (t.type === TYPE.JO) {
+          const prevOfficer = garrisonOfficer(t);
+          if (prevOfficer) prevOfficer.assignedCastleKey = null;
+          t.garrisonOfficerId = null;
         }
         t.owner = playerId;
         resetTileInfluence(t);
@@ -3451,6 +3561,19 @@ function aiTurn(aiIndex) {
       .filter((t) => t.type === TYPE.KOBO || t.type === TYPE.JINJA || t.type === TYPE.TERA)
       .sort((a, b) => neutralNeighborCount(b) - neutralNeighborCount(a))[0];
     const base = protectBase || owned.sort((a, b) => aiTileScore(b) - aiTileScore(a))[0];
+    const unguardedCastle = owned.find((t) => t.type === TYPE.JO && !t.garrisonOfficerId);
+
+    if (unguardedCastle && freeOfficerCount(aiId) > 0 && random() < 0.4) {
+      const freeOfficer = [...ai.officers]
+        .filter((o) => !o.assignedCastleKey)
+        .sort((a, b) => (b.valor + b.wit + b.admin) - (a.valor + a.wit + a.admin))[0];
+      if (freeOfficer) {
+        assignOfficerToCastle(aiId, freeOfficer, unguardedCastle);
+        logs.push(`守将配置:${freeOfficer.name}`);
+        spendAction(aiId);
+        continue;
+      }
+    }
 
     if (ai.gold >= 3 && protectBase && neutralNeighborCount(protectBase) > 0) {
       ai.gold -= 3;
@@ -3695,6 +3818,12 @@ function setOwner(playerId, c, r) {
   const t = getTile(c, r);
   if (!t) return;
   if (t.type === TYPE.UMI) return;
+  const prevOwner = t.owner;
+  if (t.type === TYPE.JO && prevOwner !== playerId) {
+    const prevOfficer = garrisonOfficer(t);
+    if (prevOfficer) prevOfficer.assignedCastleKey = null;
+    t.garrisonOfficerId = null;
+  }
   t.owner = playerId;
   resetTileInfluence(t);
   normalizeTileBuildingState(t);
@@ -3760,7 +3889,9 @@ function tileRoleDetail(tile, playerId) {
   if (tile.type === TYPE.JO) {
     const hpMax = castleMaxHp(tile);
     const hp = tile.castleHp > 0 ? tile.castleHp : hpMax;
-    return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY + buildingLevelBonus(tile)}必要。攻城${hpMax}回で陥落（耐久${hp}/${hpMax}）。文化転向に耐性+${CASTLE_FLIP_RESIST + buildingLevelBonus(tile)}。`;
+    const guard = garrisonOfficer(tile);
+    const guardText = guard ? ` 守将:${guard.name}で防衛+${castleDefenseBonus(tile)} / 文化耐性+${castleFlipBonus(tile)}。` : " 守将未配置。";
+    return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY + buildingLevelBonus(tile) + castleDefenseBonus(tile)}必要。攻城${hpMax}回で陥落（耐久${hp}/${hpMax}）。文化転向に耐性+${CASTLE_FLIP_RESIST + buildingLevelBonus(tile) + castleFlipBonus(tile)}。${guardText}`;
   }
   if (tile.type === TYPE.YAMA) {
     return `${popText} 攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
