@@ -2234,11 +2234,10 @@ class Button {
   }
   contains(mx, my) { return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h; }
   draw(enabled = true) {
-    const theme = clanTheme(HUMAN_PLAYER_ID);
-    const fillA = enabled ? color(252, 249, 242) : color(228, 232, 236);
-    const fillB = enabled ? themeColor(theme, "accentLight", 255) : color(210, 216, 222);
-    const borderCol = enabled ? themeColor(theme, "accentDark", 190) : color(150, 158, 168);
-    const labelCol = enabled ? color(18, 28, 40) : color(112, 120, 130);
+    const fillA = enabled ? color(255, 255, 255) : color(232, 236, 240);
+    const fillB = enabled ? color(248, 248, 248) : color(220, 224, 228);
+    const borderCol = enabled ? color(48, 56, 66) : color(150, 158, 168);
+    const labelCol = enabled ? color(0, 0, 0) : color(112, 120, 130);
     fillLinearGradientRect(this.x, this.y, this.w, this.h,
       fillA,
       fillB,
@@ -2247,7 +2246,7 @@ class Button {
     strokeWeight(enabled ? 1.4 : 1.1);
     rect(this.x, this.y, this.w, this.h, 12);
     if (enabled) {
-      stroke(255, 255, 255, 135);
+      stroke(255, 255, 255, 180);
       strokeWeight(1);
       line(this.x + 12, this.y + 8, this.x + this.w - 12, this.y + 8);
     }
