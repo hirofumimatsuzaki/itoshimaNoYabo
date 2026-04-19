@@ -2234,20 +2234,18 @@ class Button {
   }
   contains(mx, my) { return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h; }
   draw(enabled = true) {
-    const fillCol = enabled ? color(255, 255, 255) : color(232, 236, 240);
-    const borderCol = enabled ? color(48, 56, 66) : color(150, 158, 168);
-    const labelCol = enabled ? color(0, 0, 0) : color(112, 120, 130);
+    const fillCol = color(255, 255, 255);
+    const borderCol = enabled ? color(48, 56, 66) : color(120, 120, 120);
+    const labelCol = color(0, 0, 0);
     fill(fillCol);
     noStroke();
     rect(this.x, this.y, this.w, this.h, 12);
     stroke(borderCol);
     strokeWeight(enabled ? 1.4 : 1.1);
     rect(this.x, this.y, this.w, this.h, 12);
-    if (enabled) {
-      stroke(255, 255, 255, 180);
-      strokeWeight(1);
-      line(this.x + 12, this.y + 8, this.x + this.w - 12, this.y + 8);
-    }
+    stroke(230, 230, 230);
+    strokeWeight(1);
+    line(this.x + 12, this.y + 8, this.x + this.w - 12, this.y + 8);
     drawUiIcon(this.iconKind, this.x + 14, this.y + this.h / 2, 8);
     noStroke();
     fill(labelCol);
