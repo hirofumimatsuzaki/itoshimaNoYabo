@@ -4,6 +4,9 @@
 
 ## 現在入っている画像
 
+- `terrain-sea.png`
+- `terrain-plains.png`
+- `terrain-mountain.png`
 - `structure-sheet.png`
 - `structure-castle.png`
 - `structure-shrine.png`
@@ -17,9 +20,9 @@
 
 ## 想定ファイル
 
-- `terrain-sea.webp`
-- `terrain-plains.webp`
-- `terrain-mountain.webp`
+- `terrain-sea.png`
+- `terrain-plains.png`
+- `terrain-mountain.png`
 - `structure-port.png`
 - `structure-castle.png`
 - `structure-shrine.png`

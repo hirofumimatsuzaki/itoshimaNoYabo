@@ -15,6 +15,9 @@ const ISO_SHEAR_X = 0.48;
 const ISO_SCALE_Y = 0.75;
 const ISO_OFFSET_X = 54;
 const ISO_OFFSET_Y = 10;
+const ISO_TILE_W = HEX_W * 1.18;
+const ISO_TILE_H = HEX_SIZE * 1.22;
+const ISO_TILE_DEPTH = HEX_SIZE * 0.42;
 
 // ---------- UI ----------
 const UI_W = 320;
@@ -116,9 +119,9 @@ const CLAN_THEMES = {
 
 const ART_SPRITES = {
   terrain: {
-    sea: { path: "assets/terrain-sea.webp", alpha: 160, scale: 1.04 },
-    plains: { path: "assets/terrain-plains.webp", alpha: 150, scale: 1.02 },
-    mountain: { path: "assets/terrain-mountain.webp", alpha: 175, scale: 1.05 },
+    sea: { path: "assets/terrain-sea.png", alpha: 255, scale: 1.04 },
+    plains: { path: "assets/terrain-plains.png", alpha: 255, scale: 1.02 },
+    mountain: { path: "assets/terrain-mountain.png", alpha: 255, scale: 1.04 },
   },
   structures: {
     port: { path: "assets/structure-port.png", scale: 1.24, anchorY: 0.72 },
@@ -236,9 +239,13 @@ function initArtLibrary() {
     images: {},
   };
   defs.forEach((def) => {
-    const img = new Image();
-    img.decoding = "async";
-    img.onload = () => {
+    artLibrary.images[def.id] = {
+      img: null,
+      ready: false,
+      failed: false,
+      ...def,
+    };
+    loadImage(def.path, (img) => {
       artLibrary.loaded += 1;
       artLibrary.images[def.id] = {
         img,
@@ -247,8 +254,7 @@ function initArtLibrary() {
         ...def,
       };
       if (artLibrary.loaded + artLibrary.failed >= artLibrary.total) artLibrary.status = "ready";
-    };
-    img.onerror = () => {
+    }, () => {
       artLibrary.failed += 1;
       artLibrary.images[def.id] = {
         img: null,
@@ -257,8 +263,7 @@ function initArtLibrary() {
         ...def,
       };
       if (artLibrary.loaded + artLibrary.failed >= artLibrary.total) artLibrary.status = "ready";
-    };
-    img.src = def.path;
+    });
   });
 }
 
@@ -271,7 +276,6 @@ function structureArtId(tile) {
   if (tile.type === TYPE.MINATO) return "structures.port";
   if (tile.type === TYPE.JINJA) return "structures.shrine";
   if (tile.type === TYPE.TERA) return "structures.temple";
-  if (tile.type === TYPE.YAMA) return "structures.mountain";
   if (tile.type === TYPE.KOBO) {
     const kind = workshopKind(tile);
     if (kind === WORKSHOP_KIND.FABLAB) return "structures.workshopFablab";
@@ -356,6 +360,10 @@ function drawStructureArt(tile, x, y, size = 18) {
   return true;
 }
 
+function preload() {
+  initArtLibrary();
+}
+
 function setup() {
   const bounds = boardScreenBounds();
   const boardPixelW = ceil(bounds.maxX + 30);
@@ -365,7 +373,6 @@ function setup() {
   canvas.parent("app");
 
   textFont('"BIZ UDPMincho", "Yu Mincho", "Hiragino Mincho ProN", serif');
-  initArtLibrary();
   initializeGame();
   openStartPickPopup();
 }
@@ -1079,34 +1086,118 @@ function drawBoardBackdrop() {
   pop();
 }
 
-function drawHexTileBase(tile, cx, cy, size) {
-  const pts = projectedHexPoints(cx, cy, size);
-  const shadowPts = pts.map((p) => ({ x: p.x + 3, y: p.y + 6 }));
+function isoTileMetrics(scale = 1) {
+  return {
+    w: ISO_TILE_W * scale,
+    h: ISO_TILE_H * scale,
+    depth: ISO_TILE_DEPTH * scale,
+  };
+}
+
+function isoTileTopPointsScreen(sx, sy, scale = 1) {
+  const m = isoTileMetrics(scale);
+  return [
+    { x: sx, y: sy - m.h / 2 },
+    { x: sx + m.w / 2, y: sy },
+    { x: sx, y: sy + m.h / 2 },
+    { x: sx - m.w / 2, y: sy },
+  ];
+}
+
+function isoTileRightFacePointsScreen(sx, sy, scale = 1) {
+  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const depth = isoTileMetrics(scale).depth;
+  return [
+    top[1],
+    top[2],
+    { x: top[2].x, y: top[2].y + depth },
+    { x: top[1].x, y: top[1].y + depth },
+  ];
+}
+
+function isoTileLeftFacePointsScreen(sx, sy, scale = 1) {
+  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const depth = isoTileMetrics(scale).depth;
+  return [
+    top[2],
+    top[3],
+    { x: top[3].x, y: top[3].y + depth },
+    { x: top[2].x, y: top[2].y + depth },
+  ];
+}
+
+function drawIsoTileOutlineScreen(sx, sy, scale = 1) {
+  drawPolygon(isoTileTopPointsScreen(sx, sy, scale));
+}
+
+function drawIsoTileShadowScreen(sx, sy, scale = 1, alpha = 34) {
+  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const shadowPts = top.map((p) => ({ x: p.x + 4, y: p.y + 8 }));
   noStroke();
-  fill(30, 44, 60, 34);
+  fill(30, 44, 60, alpha);
   drawPolygon(shadowPts);
-  fill(terrainColor(tile.type));
-  drawPolygon(pts);
-  drawTerrainArtOverlay(tile, pts);
-  stroke(255, 255, 255, tile.type === TYPE.UMI ? 60 : 95);
-  strokeWeight(1.1);
-  line(pts[0].x, pts[0].y, pts[3].x, pts[3].y);
-  stroke(58, 82, 102, 58);
-  line(pts[2].x, pts[2].y, pts[5].x, pts[5].y);
+}
+
+function drawTerrainArtTile(tile, sx, sy, scale = 1) {
+  const entry = artEntry(terrainArtId(tile));
+  if (!entry || !entry.ready || !entry.img) return false;
+  const m = isoTileMetrics(scale);
+  const w = m.w * 2.32 * (entry.scale || 1);
+  const h = w * (entry.img.height / max(1, entry.img.width));
+  push();
+  imageMode(CENTER);
+  tint(255, entry.alpha || 255);
+  image(entry.img, sx, sy + m.depth * 0.18, w, h);
+  noTint();
+  pop();
+  return true;
+}
+
+function drawIsoTerrainFallback(tile, sx, sy, scale = 1) {
+  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const right = isoTileRightFacePointsScreen(sx, sy, scale);
+  const left = isoTileLeftFacePointsScreen(sx, sy, scale);
+  const base = color(terrainColor(tile.type));
+  const topCol = tile.type === TYPE.UMI ? color(74, 136, 176) : base;
+  const leftCol = lerpColor(topCol, color(44, 52, 60), 0.22);
+  const rightCol = lerpColor(topCol, color(18, 28, 36), 0.34);
   noStroke();
-  fill(255, 255, 255, tile.type === TYPE.UMI ? 24 : 34);
+  fill(leftCol);
+  drawPolygon(left);
+  fill(rightCol);
+  drawPolygon(right);
+  fill(topCol);
+  drawPolygon(top);
+  stroke(255, 255, 255, tile.type === TYPE.UMI ? 56 : 90);
+  strokeWeight(1.1);
+  line(top[0].x, top[0].y, top[1].x, top[1].y);
+  line(top[0].x, top[0].y, top[3].x, top[3].y);
+  stroke(32, 44, 56, 70);
+  line(top[1].x, top[1].y, top[2].x, top[2].y);
+  line(top[2].x, top[2].y, top[3].x, top[3].y);
+  noStroke();
+  fill(255, 255, 255, tile.type === TYPE.UMI ? 16 : 28);
   beginShape();
-  vertex(pts[5].x, pts[5].y);
-  vertex(pts[0].x, pts[0].y);
-  vertex((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
-  vertex((pts[4].x + pts[5].x) / 2, (pts[4].y + pts[5].y) / 2);
+  vertex(top[3].x, lerp(top[3].y, top[0].y, 0.4));
+  vertex(top[0].x, top[0].y);
+  vertex(top[1].x, lerp(top[1].y, top[0].y, 0.55));
+  vertex(sx, sy);
   endShape(CLOSE);
+}
+
+function drawHexTileBase(tile, cx, cy, size) {
+  const ctr = projectPoint(cx, cy);
+  drawIsoTileShadowScreen(ctr.x, ctr.y, size / HEX_SIZE);
+  if (!drawTerrainArtTile(tile, ctr.x, ctr.y, size / HEX_SIZE)) {
+    drawIsoTerrainFallback(tile, ctr.x, ctr.y, size / HEX_SIZE);
+  }
 }
 
 function drawOwnerCrest(tile, cx, cy, size) {
   if (tile.owner === 0) return;
   const theme = clanTheme(tile.owner);
   const crestColor = themeColor(theme, "accent");
+  const ctr = projectPoint(cx, cy);
   push();
   fill(red(crestColor), green(crestColor), blue(crestColor), 150);
   stroke(255, 255, 255, 120);
@@ -1115,9 +1206,9 @@ function drawOwnerCrest(tile, cx, cy, size) {
   fill(255, 245);
   stroke(themeColor(theme, "accentDark", 170));
   strokeWeight(1);
-  ellipse(cx, cy - size * 0.04, size * 0.4, size * 0.4);
+  ellipse(ctr.x, ctr.y - size * 0.08, size * 0.72, size * 0.52);
   noFill();
-  drawClanCrestMark(theme.crest, cx, cy - size * 0.04, size * 0.13, themeColor(theme, "accentDark"), 220);
+  drawClanCrestMark(theme.crest, ctr.x, ctr.y - size * 0.08, size * 0.22, themeColor(theme, "accentDark"), 220);
   pop();
 }
 
@@ -2113,10 +2204,11 @@ function drawHexGrid() {
       const t = grid[r][c];
       const ctr = centers[r][c];
       const isoCtr = projectPoint(ctr.x, ctr.y);
+      const tileGroundY = isoCtr.y - isoTileMetrics(1).depth * 0.48;
 
       if (t.type === TYPE.YAMA) drawMountainShadow(ctr.x, ctr.y, HEX_SIZE);
       drawHexTileBase(t, ctr.x, ctr.y, HEX_SIZE);
-      if (t.type === TYPE.UMI) drawSeaPattern(isoCtr.x, isoCtr.y, HEX_SIZE * 0.88);
+      if (t.type === TYPE.UMI && !artEntry(terrainArtId(t))?.ready) drawSeaPattern(isoCtr.x, isoCtr.y, HEX_SIZE * 0.88);
 
       if (t.owner === 0 && t.type !== TYPE.UMI) {
         const a = constrain((t.inf[HUMAN_PLAYER_ID] || 0) * 6, 0, 90);
@@ -2137,13 +2229,13 @@ function drawHexGrid() {
       textAlign(CENTER, CENTER);
       textSize(14);
       if (t.type !== TYPE.HEICHI) {
-        drawIsoStructure(t, isoCtr.x, isoCtr.y - 4, HEX_SIZE * 0.62);
+        drawIsoStructure(t, isoCtr.x, tileGroundY, HEX_SIZE * 0.62);
         if (t.type !== TYPE.UMI) {
           textSize(9);
           fill(12, 20, 28, 215);
-          rect(isoCtr.x - 26, isoCtr.y + 4, 52, 15, 6);
+          rect(isoCtr.x - 26, isoCtr.y + isoTileMetrics(1).depth * 0.5, 52, 15, 6);
           fill(247, 243, 233);
-          text(tileLabel(t), isoCtr.x, isoCtr.y + 11);
+          text(tileLabel(t), isoCtr.x, isoCtr.y + isoTileMetrics(1).depth * 0.5 + 7);
         }
       }
 
@@ -2237,11 +2329,11 @@ function drawCoastlineRim() {
       if (t.type === TYPE.UMI) continue;
       const coast = neighbors6(c, r).some((nt) => nt.type === TYPE.UMI);
       if (!coast) continue;
-      const ctr = centers[r][c];
-      drawHex(ctr.x, ctr.y, HEX_SIZE * 0.95);
+      const ctr = projectPoint(centers[r][c].x, centers[r][c].y);
+      drawIsoTileOutlineScreen(ctr.x, ctr.y, 0.96);
       stroke(98, 128, 146, 36);
       strokeWeight(1.4);
-      drawHex(ctr.x, ctr.y, HEX_SIZE * 1.02);
+      drawIsoTileOutlineScreen(ctr.x, ctr.y, 1.03);
       stroke(248, 251, 242, 150);
       strokeWeight(2.8);
     }
@@ -3848,7 +3940,8 @@ function aiTileScore(t) {
 // ------------------ ヘックス描画・クリック判定 ------------------
 
 function drawHex(cx, cy, size) {
-  drawPolygon(projectedHexPoints(cx, cy, size));
+  const ctr = projectPoint(cx, cy);
+  drawIsoTileOutlineScreen(ctr.x, ctr.y, size / HEX_SIZE);
 }
 
 function pickHex(mx, my) {
@@ -3871,7 +3964,8 @@ function pickHex(mx, my) {
 }
 
 function pointInHex(px, py, cx, cy, size) {
-  const pts = projectedHexPoints(cx, cy, size);
+  const ctr = projectPoint(cx, cy);
+  const pts = isoTileTopPointsScreen(ctr.x, ctr.y, size / HEX_SIZE);
   let inside = false;
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
     const xi = pts[i].x, yi = pts[i].y;
@@ -3919,10 +4013,9 @@ function drawPolygon(pts) {
 }
 
 function drawMountainShadow(cx, cy, size) {
-  const pts = projectedHexPoints(cx, cy, size * 0.96);
-  const sx = 9;
-  const sy = 7;
-  const shadowPts = pts.map((p) => ({ x: p.x + sx, y: p.y + sy }));
+  const ctr = projectPoint(cx, cy);
+  const pts = isoTileTopPointsScreen(ctr.x, ctr.y, size / HEX_SIZE);
+  const shadowPts = pts.map((p) => ({ x: p.x + 10, y: p.y + 9 }));
   noStroke();
   fill(12, 26, 40, 52);
   drawPolygon(shadowPts);
@@ -3937,12 +4030,14 @@ function boardScreenBounds() {
     for (let c = 0; c < COLS; c++) {
       const cx = boardX + c * HEX_W + (r % 2) * (HEX_W / 2) + HEX_W / 2;
       const cy = boardY + r * HEX_VSTEP + HEX_H / 2;
-      const top = projectedHexPoints(cx, cy, HEX_SIZE);
+      const ctr = projectPoint(cx, cy);
+      const top = isoTileTopPointsScreen(ctr.x, ctr.y, 1);
+      const depth = isoTileMetrics(1).depth;
       for (const p of top) {
-        minX = min(minX, p.x);
-        minY = min(minY, p.y);
-        maxX = max(maxX, p.x + 10);
-        maxY = max(maxY, p.y + 8);
+        minX = min(minX, p.x - 24);
+        minY = min(minY, p.y - 26);
+        maxX = max(maxX, p.x + 24);
+        maxY = max(maxY, p.y + depth + 28);
       }
     }
   }
