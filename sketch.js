@@ -84,6 +84,36 @@ const OFFICER_NAME_POOL = {
   3: ["桜井主計", "引津将監", "芥屋大膳", "岐志玄朔", "野北又兵衛", "船越修理"],
 };
 
+const CLAN_THEMES = {
+  1: {
+    id: "futajo",
+    accent: [56, 124, 255],
+    accentDark: [28, 68, 146],
+    accentLight: [201, 223, 255],
+    panelA: [234, 240, 250],
+    panelB: [205, 218, 236],
+    crest: "wave",
+  },
+  2: {
+    id: "ito",
+    accent: [236, 96, 84],
+    accentDark: [132, 46, 40],
+    accentLight: [253, 220, 214],
+    panelA: [248, 236, 232],
+    panelB: [233, 208, 202],
+    crest: "sun",
+  },
+  3: {
+    id: "shima",
+    accent: [90, 170, 118],
+    accentDark: [42, 98, 60],
+    accentLight: [212, 240, 219],
+    panelA: [236, 244, 236],
+    panelB: [208, 226, 211],
+    crest: "leaf",
+  },
+};
+
 // ---------- 迥ｶ諷・----------
 let grid = [];
 let centers = [];
@@ -140,6 +170,7 @@ let soundtrack = {
   step: 0,
   nextAt: 0,
   tempo: 94,
+  themeId: "futajo",
   phrase: [0, 2, 4, 7, 9, 7, 4, 2, 0, -3, 0, 2, 4, 2, 0, -3],
   button: { x: 0, y: 0, w: 124, h: 28 },
 };
@@ -149,6 +180,7 @@ let startPickPopup = { open: true };
 let boardX = 18;
 let boardY = TOP_H + 12;
 let camera = { x: 0, y: 0, zoom: 1 };
+let cameraShake = { framesLeft: 0, strength: 0 };
 
 // 山越え効果ターン
 
@@ -232,19 +264,110 @@ function pickStartOption(mx, my) {
   return null;
 }
 
+function clanTheme(playerId) {
+  return CLAN_THEMES[playerId] || CLAN_THEMES[1];
+}
+
+function currentTheme() {
+  const p = players[currentPlayer] || playerById(HUMAN_PLAYER_ID) || players[0];
+  return clanTheme(p ? p.id : 1);
+}
+
+function themeColor(theme, key, alpha = 255) {
+  const src = theme[key];
+  return color(src[0], src[1], src[2], alpha);
+}
+
+function soundtrackThemeConfig(themeId) {
+  if (themeId === "ito") {
+    return {
+      tempo: 102,
+      phrase: [0, 3, 7, 10, 7, 3, 0, -2, 0, 5, 8, 12, 8, 5, 3, 0],
+    };
+  }
+  if (themeId === "shima") {
+    return {
+      tempo: 90,
+      phrase: [0, 2, 5, 9, 5, 2, -1, -3, 0, 2, 4, 7, 4, 2, 0, -5],
+    };
+  }
+  return {
+    tempo: 94,
+    phrase: [0, 2, 4, 7, 9, 7, 4, 2, 0, -3, 0, 2, 4, 2, 0, -3],
+  };
+}
+
+function updateSoundtrackTheme(force = false) {
+  const theme = currentTheme();
+  if (!theme) return;
+  if (!force && soundtrack.themeId === theme.id) return;
+  const cfg = soundtrackThemeConfig(theme.id);
+  soundtrack.themeId = theme.id;
+  soundtrack.tempo = cfg.tempo;
+  soundtrack.phrase = [...cfg.phrase];
+  soundtrack.step = 0;
+  if (soundtrack.ready && soundtrack.ctx) {
+    soundtrack.nextAt = soundtrack.ctx.currentTime + 0.06;
+  }
+}
+
+function triggerCameraShake(strength = 7, frames = 12) {
+  cameraShake.framesLeft = max(cameraShake.framesLeft, frames);
+  cameraShake.strength = max(cameraShake.strength, strength);
+}
+
+function updateCameraShake() {
+  if (cameraShake.framesLeft <= 0) {
+    camera.x = 0;
+    camera.y = 0;
+    cameraShake.strength = 0;
+    return;
+  }
+  const t = cameraShake.framesLeft / 12;
+  const s = cameraShake.strength * t;
+  camera.x = sin(frameCount * 1.9) * s;
+  camera.y = cos(frameCount * 2.3) * s * 0.7;
+  cameraShake.framesLeft -= 1;
+}
+
+function drawClanCrestMark(kind, x, y, size, col, alpha = 255) {
+  push();
+  translate(x, y);
+  stroke(red(col), green(col), blue(col), alpha);
+  fill(red(col), green(col), blue(col), alpha * 0.2);
+  strokeWeight(1.8);
+  if (kind === "wave") {
+    noFill();
+    arc(-size * 0.18, 0, size * 0.9, size * 0.9, PI * 0.15, PI * 0.95);
+    arc(size * 0.18, 0, size * 0.9, size * 0.9, PI * 1.05, PI * 1.85);
+    line(-size * 0.68, 0, size * 0.68, 0);
+  } else if (kind === "sun") {
+    ellipse(0, 0, size * 1.05, size * 1.05);
+    for (let i = 0; i < 8; i++) {
+      const a = (TWO_PI / 8) * i;
+      line(cos(a) * size * 0.78, sin(a) * size * 0.78, cos(a) * size * 1.18, sin(a) * size * 1.18);
+    }
+  } else {
+    beginShape();
+    vertex(0, -size * 1.02);
+    bezierVertex(size * 0.94, -size * 0.62, size * 0.78, size * 0.42, 0, size * 1.12);
+    bezierVertex(-size * 0.78, size * 0.42, -size * 0.94, -size * 0.62, 0, -size * 1.02);
+    endShape(CLOSE);
+    line(0, -size * 0.82, 0, size * 0.82);
+  }
+  pop();
+}
+
 function drawStartPickPopup() {
   if (!startPickPopup.open) return;
   fill(0, 120);
   rect(0, 0, width, height);
 
   const r = startPickPopupRect();
-  fill(255);
-  stroke(24, 52, 84);
-  strokeWeight(2);
-  rect(r.x, r.y, r.w, r.h, 16);
+  drawPanelCard(r.x, r.y, r.w, r.h, 22);
 
   noStroke();
-  fill(20);
+  fill(24, 38, 56);
   textAlign(LEFT, TOP);
   textSize(24);
   text("開始勢力を選択", r.x + 24, r.y + 20);
@@ -253,12 +376,14 @@ function drawStartPickPopup() {
   text("自分が操作する勢力を1つ選んで開始します。", r.x + 24, r.y + 60);
 
   for (const op of startPickOptionRects()) {
-    fill(244, 248, 255);
-    stroke(64, 102, 150);
-    strokeWeight(1.5);
-    rect(op.x, op.y, op.w, op.h, 12);
+    const theme = clanTheme(op.id);
+    fillLinearGradientRect(op.x, op.y, op.w, op.h, themeColor(theme, "panelA"), themeColor(theme, "panelB"), false, 14);
+    stroke(themeColor(theme, "accentDark", 120));
+    strokeWeight(1.3);
+    rect(op.x, op.y, op.w, op.h, 14);
+    drawClanCrestMark(theme.crest, op.x + op.w - 22, op.y + 22, 9, themeColor(theme, "accentDark"), 190);
     noStroke();
-    fill(25);
+    fill(themeColor(theme, "accentDark"));
     textSize(18);
     textAlign(LEFT, TOP);
     text(op.name, op.x + 12, op.y + 10);
@@ -471,6 +596,72 @@ function drawCastleStructure(tile, x, y, size) {
   }
 }
 
+function drawCastleAnimation(tile, x, y, size) {
+  const ownerTheme = tile.owner ? clanTheme(tile.owner) : clanTheme(1);
+  const flutter = sin(frameCount * 0.14 + tile.c * 0.8 + tile.r * 0.5);
+  stroke(themeColor(ownerTheme, "accentDark", 190));
+  strokeWeight(1.2);
+  line(x + size * 0.72, y - size * 0.86, x + size * 0.72, y - size * 1.58);
+  noStroke();
+  fill(themeColor(ownerTheme, "accent", 210));
+  beginShape();
+  vertex(x + size * 0.74, y - size * 1.56);
+  vertex(x + size * 1.1 + flutter * size * 0.08, y - size * 1.48);
+  vertex(x + size * 0.9, y - size * 1.18);
+  vertex(x + size * 0.74, y - size * 1.22);
+  endShape(CLOSE);
+  fill(255, 220, 120, 120 + 40 * sin(frameCount * 0.1 + tile.c));
+  ellipse(x - size * 0.12, y - size * 0.48, size * 0.12, size * 0.12);
+  ellipse(x + size * 0.14, y - size * 0.54, size * 0.1, size * 0.1);
+}
+
+function drawShrineAnimation(tile, x, y, size) {
+  const t = frameCount * 0.06 + tile.c * 0.4 + tile.r * 0.6;
+  noFill();
+  stroke(tile.type === TYPE.JINJA ? color(232, 196, 112, 120) : color(202, 188, 230, 116));
+  strokeWeight(1.4);
+  ellipse(x, y - size * 0.64, size * (0.9 + 0.06 * sin(t)), size * (0.34 + 0.04 * cos(t)));
+  ellipse(x, y - size * 0.64, size * (1.18 + 0.06 * cos(t)), size * (0.46 + 0.04 * sin(t)));
+  stroke(255, 248, 236, 120);
+  line(x - size * 0.4, y - size * 0.95, x - size * 0.4, y - size * 0.46);
+  line(x - size * 0.2, y - size * 0.92, x - size * 0.2, y - size * 0.5);
+  line(x, y - size * 0.9, x, y - size * 0.48);
+  line(x + size * 0.2, y - size * 0.92, x + size * 0.2, y - size * 0.5);
+  line(x + size * 0.4, y - size * 0.95, x + size * 0.4, y - size * 0.46);
+}
+
+function drawWorkshopAnimation(tile, x, y, size) {
+  const kind = workshopKind(tile);
+  const t = frameCount * 0.08 + tile.c + tile.r;
+  if (kind === WORKSHOP_KIND.FABLAB) {
+    noStroke();
+    fill(128, 214, 255, 110);
+    for (let i = 0; i < 3; i++) {
+      const px = x - size * 0.2 + i * size * 0.22 + sin(t + i) * size * 0.04;
+      const py = y - size * 0.84 - i * size * 0.08;
+      ellipse(px, py, size * 0.08, size * 0.08);
+    }
+    stroke(128, 214, 255, 120);
+    strokeWeight(1.2);
+    line(x - size * 0.24, y - size * 0.78, x + size * 0.16, y - size * 0.98);
+  } else if (kind === WORKSHOP_KIND.WASHI) {
+    noStroke();
+    fill(252, 248, 238, 150);
+    rect(x - size * 0.62, y - size * 0.88 + sin(t) * 2, size * 0.18, size * 0.26, 3);
+    rect(x - size * 0.38, y - size * 0.82 + sin(t + 0.8) * 2, size * 0.14, size * 0.22, 3);
+  } else if (kind === WORKSHOP_KIND.POTTERY) {
+    noStroke();
+    fill(255, 192, 112, 126 + 30 * sin(t));
+    ellipse(x + size * 0.04, y - size * 0.24, size * 0.16, size * 0.18);
+    fill(255, 220, 152, 80);
+    ellipse(x + size * 0.04, y - size * 0.3, size * 0.26, size * 0.12);
+  } else {
+    noStroke();
+    fill(180, 180, 180, 90);
+    ellipse(x + size * 0.28, y - size * 1.1 + sin(t) * 1.5, size * 0.15, size * 0.1);
+  }
+}
+
 function drawIsoStructure(tile, x, y, size = 18) {
   const t = tile.type;
   if (t === TYPE.UMI) {
@@ -491,10 +682,17 @@ function drawIsoStructure(tile, x, y, size = 18) {
     drawHarborPier(x, y + size * 0.12, size * 0.86, isFishingPort(tile));
     drawIsoPrism(x + size * 0.32, y - size * 0.05, size * 0.62, size * 0.42, size * 0.42, [214, 222, 236], [186, 197, 216], [168, 179, 198]);
     drawIsoRoof(x + size * 0.32, y - size * 0.08, size * 0.6, size * 0.42, size * 0.42, [94, 132, 176], [56, 82, 118]);
+    if (isFishingPort(tile)) {
+      noStroke();
+      fill(250, 252, 255, 180);
+      ellipse(x - size * 0.36, y - size * 0.46 + sin(frameCount * 0.08 + tile.c) * 1.5, size * 0.14, size * 0.08);
+      ellipse(x - size * 0.18, y - size * 0.54 + sin(frameCount * 0.08 + tile.r) * 1.2, size * 0.1, size * 0.06);
+    }
     return;
   }
   if (t === TYPE.JO) {
     drawCastleStructure(tile, x, y, size);
+    drawCastleAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.KOBO) {
@@ -506,11 +704,13 @@ function drawIsoStructure(tile, x, y, size = 18) {
     noStroke();
     fill(170, 170, 170, 140);
     ellipse(x + size * 0.28, y - size * 1.08 + sin(frameCount * 0.07) * 1.2, size * 0.16, size * 0.12);
+    drawWorkshopAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.TERA) {
     drawIsoPrism(x, y + size * 0.08, size * 0.94, size * 0.58, size * 0.5, [236, 224, 208], [210, 195, 178], [196, 182, 166]);
     drawIsoRoof(x, y + size * 0.06, size * 1.15, size * 0.72, size * 0.5, [108, 90, 86], [64, 54, 52]);
+    drawShrineAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.JINJA) {
@@ -521,6 +721,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
     line(x - size * 0.65, y + size * 0.22, x - size * 0.65, y - size * 0.32);
     line(x + size * 0.65, y + size * 0.22, x + size * 0.65, y - size * 0.32);
     line(x - size * 0.85, y - size * 0.34, x + size * 0.85, y - size * 0.34);
+    drawShrineAnimation(tile, x, y, size);
     return;
   }
 }
@@ -564,6 +765,19 @@ function drawPanelCard(x, y, w, h, radius = 18) {
   rect(x, y, w, h, radius);
   stroke(255, 255, 255, 180);
   line(x + 18, y + 14, x + w - 18, y + 14);
+  pop();
+}
+
+function drawThemeFrame(x, y, w, h, theme, radius = 18) {
+  push();
+  noFill();
+  stroke(themeColor(theme, "accent", 110));
+  strokeWeight(1.4);
+  rect(x, y, w, h, radius);
+  stroke(themeColor(theme, "accentLight", 120));
+  strokeWeight(1);
+  line(x + 16, y + 14, x + w - 16, y + 14);
+  drawClanCrestMark(theme.crest, x + w - 22, y + 22, 8, themeColor(theme, "accentDark"), 180);
   pop();
 }
 
@@ -614,17 +828,19 @@ function drawHexTileBase(tile, cx, cy, size) {
 
 function drawOwnerCrest(tile, cx, cy, size) {
   if (tile.owner === 0) return;
-  const crestColor = players[tile.owner - 1].col;
+  const theme = clanTheme(tile.owner);
+  const crestColor = themeColor(theme, "accent");
   push();
   fill(red(crestColor), green(crestColor), blue(crestColor), 150);
   stroke(255, 255, 255, 120);
   strokeWeight(1.2);
   drawHex(cx, cy, size);
-  fill(255, 250);
-  noStroke();
-  ellipse(cx, cy - size * 0.04, size * 0.34, size * 0.34);
-  fill(red(crestColor), green(crestColor), blue(crestColor), 210);
-  ellipse(cx, cy - size * 0.04, size * 0.18, size * 0.18);
+  fill(255, 245);
+  stroke(themeColor(theme, "accentDark", 170));
+  strokeWeight(1);
+  ellipse(cx, cy - size * 0.04, size * 0.4, size * 0.4);
+  noFill();
+  drawClanCrestMark(theme.crest, cx, cy - size * 0.04, size * 0.13, themeColor(theme, "accentDark"), 220);
   pop();
 }
 
@@ -719,19 +935,20 @@ function updateSoundtrack() {
   while (soundtrack.nextAt <= soundtrack.ctx.currentTime + lookAhead) {
     const t = soundtrack.nextAt;
     const offset = soundtrack.phrase[soundtrack.step % soundtrack.phrase.length];
-    const leadMidi = 67 + offset;
+    const themeShift = soundtrack.themeId === "ito" ? 2 : soundtrack.themeId === "shima" ? -1 : 0;
+    const leadMidi = 67 + offset + themeShift;
     soundtrack.lead.frequency.setValueAtTime(midiToHz(leadMidi), t);
     soundtrack.leadGain.gain.cancelScheduledValues(t);
     soundtrack.leadGain.gain.setValueAtTime(0.0001, t);
-    soundtrack.leadGain.gain.linearRampToValueAtTime(0.06, t + 0.02);
+    soundtrack.leadGain.gain.linearRampToValueAtTime(soundtrack.themeId === "ito" ? 0.07 : soundtrack.themeId === "shima" ? 0.052 : 0.06, t + 0.02);
     soundtrack.leadGain.gain.exponentialRampToValueAtTime(0.0001, t + beat * 0.45);
 
     if (soundtrack.step % 2 === 0) {
-      const bassMidi = 43 + (offset >= 0 ? 0 : -2);
+      const bassMidi = 43 + (offset >= 0 ? 0 : -2) + (soundtrack.themeId === "shima" ? -2 : 0);
       soundtrack.bass.frequency.setValueAtTime(midiToHz(bassMidi), t);
       soundtrack.bassGain.gain.cancelScheduledValues(t);
       soundtrack.bassGain.gain.setValueAtTime(0.0001, t);
-      soundtrack.bassGain.gain.linearRampToValueAtTime(0.045, t + 0.01);
+      soundtrack.bassGain.gain.linearRampToValueAtTime(soundtrack.themeId === "ito" ? 0.04 : 0.045, t + 0.01);
       soundtrack.bassGain.gain.exponentialRampToValueAtTime(0.0001, t + beat * 0.9);
     }
 
@@ -813,30 +1030,27 @@ function resourcePairs(p) {
     ["culture", p.culture],
     ["force", p.force],
     ["recruit", officerCount(p)],
-    ["washi", p.washi],
-    ["pottery", p.pottery],
-    ["innovation", p.innovation],
   ];
 }
 
 function drawTopResourceLine(p, eventState, ap, x, y) {
   textAlign(LEFT, CENTER);
-  textSize(11);
+  textSize(10);
   let cx = x;
   for (const [kind, value] of resourcePairs(p)) {
     drawUiIcon(kind, cx + 5, y, 6);
     fill(245);
     text(`${value}`, cx + 14, y);
-    cx += 44;
+    cx += 38;
   }
   drawUiIcon("event", cx + 5, y, 6);
   fill(245);
   text(eventState, cx + 14, y);
-  cx += 78;
+  cx += 70;
   drawUiIcon("action", cx + 5, y, 6);
   fill(245);
   text(`${ap}/${ACTIONS_PER_TURN}`, cx + 14, y);
-  cx += 64;
+  cx += 54;
   fill(245);
   text(`季節:${seasonState.name}`, cx + 2, y);
 }
@@ -1148,9 +1362,9 @@ function advanceMission(playerId, kind, tile = null, amount = 1) {
 
 function initializeGame() {
   players = [
-    { name: "二丈軍", id: 1, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(1), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(56, 124, 255) },
-    { name: "伊都軍", id: 2, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(2), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(236, 96, 84) },
-    { name: "志摩軍", id: 3, food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(3), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(90, 170, 118) },
+    { name: "二丈軍", id: 1, theme: clanTheme(1), food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(1), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(...CLAN_THEMES[1].accent) },
+    { name: "伊都軍", id: 2, theme: clanTheme(2), food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(2), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(...CLAN_THEMES[2].accent) },
+    { name: "志摩軍", id: 3, theme: clanTheme(3), food: 10, gold: 10, culture: 6, force: 3, officers: [], officerPool: clanOfficerPool(3), officerSeq: 0, washi: 0, pottery: 0, innovation: 0, col: color(...CLAN_THEMES[3].accent) },
   ];
   currentPlayer = 0;
   turn = 1;
@@ -1187,10 +1401,13 @@ function initializeGame() {
 
   initEventDeck();
   for (const pid of playerIds()) assignMission(pid);
+  updateSoundtrackTheme(true);
   buildButtons();
 }
 
 function draw() {
+  updateCameraShake();
+  updateSoundtrackTheme();
   background(232, 240, 250);
   drawTopBar();
   drawHexGrid();
@@ -1519,9 +1736,10 @@ function makeFixedItoshimaMap() {
 // ------------------ 謠冗判 ------------------
 
 function drawTopBar() {
-  fillLinearGradientRect(0, 0, width, TOP_H, color(27, 43, 66), color(52, 72, 96));
+  const theme = currentTheme();
+  fillLinearGradientRect(0, 0, width, TOP_H, themeColor(theme, "accentDark"), themeColor(theme, "accent"));
   drawWovenPattern(0, 0, width, TOP_H, 12);
-  stroke(255, 255, 255, 28);
+  stroke(themeColor(theme, "accentLight", 90));
   line(0, TOP_H - 1, width, TOP_H - 1);
 
   fill(245);
@@ -1529,8 +1747,9 @@ function drawTopBar() {
   textSize(20);
   text(`第${turn}ターン`, 18, TOP_H / 2 - 8);
   textSize(12);
-  fill(212, 223, 235);
+  fill(themeColor(theme, "accentLight"));
   text(`${players[currentPlayer].name}の手番`, 20, TOP_H / 2 + 12);
+  drawClanCrestMark(theme.crest, 120, TOP_H / 2 - 1, 9, color(255), 210);
 
   const me = players[currentPlayer];
   const used = !!eventUsedByPlayer[me.id];
@@ -1538,7 +1757,7 @@ function drawTopBar() {
   const eventState = ready ? (used ? "使用済" : "使用可") : "発生なし";
   const ap = actionsLeft[me.id];
   textSize(12);
-  drawTopResourceLine(me, eventState, ap, 278, TOP_H / 2);
+  drawTopResourceLine(me, eventState, ap, 170, TOP_H / 2);
   drawSoundtrackButton();
 }
 
@@ -1707,9 +1926,11 @@ function drawHarborPier(cx, cy, size, fishing = false) {
 function drawRightPanel() {
   const px = width - UI_W;
   const py = TOP_H;
-  fillLinearGradientRect(px, py, UI_W, height - TOP_H - BOTTOM_H, color(232, 237, 234), color(205, 218, 226));
+  const theme = currentTheme();
+  fillLinearGradientRect(px, py, UI_W, height - TOP_H - BOTTOM_H, themeColor(theme, "panelA"), themeColor(theme, "panelB"));
   drawWovenPattern(px, py, UI_W, height - TOP_H - BOTTOM_H, 10);
   drawPanelCard(px + 10, py + 10, UI_W - 20, height - TOP_H - BOTTOM_H - 20, 22);
+  drawThemeFrame(px + 10, py + 10, UI_W - 20, height - TOP_H - BOTTOM_H - 20, theme, 22);
 
   fill(28, 42, 58);
   textAlign(LEFT, TOP);
@@ -1750,6 +1971,7 @@ function drawRightPanel() {
   text(`行動: ${actionsLeft[HUMAN_PLAYER_ID]}/${ACTIONS_PER_TURN} / 文化転向: ${flipCapturesThisTurn[HUMAN_PLAYER_ID]}/${MAX_FLIPS_PER_PLAYER_TURN}`, px + 28, py + 124);
   text(`武将: ${officerCount(HUMAN_PLAYER_ID)}/${officerLimit(HUMAN_PLAYER_ID)} / 先鋒: ${officerSummary(HUMAN_PLAYER_ID)}`, px + 28, py + 140, UI_W - 56, 30);
   text(`勅命: ${missionStatusText(HUMAN_PLAYER_ID)}`, px + 28, py + 172, UI_W - 56, 30);
+  text(`産物: 和紙${meStat.washi} / 陶器${meStat.pottery} / 機会${meStat.innovation}`, px + 28, py + 196, UI_W - 56, 18);
   const buttonsBottom = buttons.length > 0 ? buttons[buttons.length - 1].y + buttons[buttons.length - 1].h : py + 110;
   const tileInfoY = buttonsBottom + 20;
 
@@ -1779,23 +2001,25 @@ function drawRightPanel() {
 
 function drawBottomBar() {
   const y0 = height - BOTTOM_H;
-  fillLinearGradientRect(0, y0, width, BOTTOM_H, color(242, 237, 226), color(220, 227, 232));
+  const theme = clanTheme(HUMAN_PLAYER_ID);
+  fillLinearGradientRect(0, y0, width, BOTTOM_H, themeColor(theme, "panelA"), themeColor(theme, "panelB"));
   drawWovenPattern(0, y0, width, BOTTOM_H, 10);
   drawPanelCard(10, y0 + 10, width - 20, BOTTOM_H - 20, 18);
+  drawThemeFrame(10, y0 + 10, width - 20, BOTTOM_H - 20, theme, 18);
 
   fill(28, 42, 58);
   textAlign(LEFT, TOP);
   textSize(14);
   text("戦況報告", 24, y0 + 20);
-  textSize(13);
-  text(message, 24, y0 + 46, width - 48, 32);
+  textSize(12);
+  text(message, 24, y0 + 44, width - 48, 28);
 
   fill(50, 86, 126);
-  textSize(12);
-  if (latestComment) text(`軍記: ${latestComment}`, 24, y0 + 78);
+  textSize(11);
+  if (latestComment) text(`軍記: ${latestComment}`, 24, y0 + 74, width - 48, 18);
 
   fill(78, 78, 78);
-  textSize(12);
+  textSize(11);
   const enemyRate = round(maxEnemyControlRate(HUMAN_PLAYER_ID) * 100);
   const controlGoal = round(CONTROL_WIN_RATE * 100);
   const dangerControlLine = max(0, controlGoal - 15);
@@ -1803,23 +2027,53 @@ function drawBottomBar() {
   const hint = danger
     ? `警戒: 敵の勝利が近い (支配率${enemyRate}%)`
     : `勝利条件: 支配率${controlGoal}% / 敵: 支配率${enemyRate}%`;
-  text(hint, 24, y0 + 98);
+  text(hint, 24, y0 + 92);
 
   const mission = missionStateByPlayer[HUMAN_PLAYER_ID];
   const missionLine = mission
     ? `${mission.title} - ${mission.desc} / 褒賞: ${missionRewardText(mission.reward)} / 状態:${mission.completed ? "達成" : `${mission.progress}/${mission.target}`}`
     : "勅命: なし";
-  text(missionLine, 24, y0 + 116, width - 48, 24);
+  text(missionLine, 24, y0 + 108, width - 48, 22);
 
   fill(64, 64, 64);
-  textSize(11);
+  textSize(10);
   const report = incomeReport[HUMAN_PLAYER_ID] || "収入内訳: まだ収益処理なし";
-  text(report, 24, y0 + 136, width - 48, 20);
+  text(report, 24, y0 + 130, width - 48, 16);
+}
+
+function drawOutcomeBackdrop(x, y, w, h, outcome) {
+  push();
+  const theme = outcome === "win" ? clanTheme(HUMAN_PLAYER_ID) : clanTheme(max(1, players[(currentPlayer + 1) % max(1, players.length)]?.id || 2));
+  fillLinearGradientRect(x, y, w, h,
+    outcome === "win" ? themeColor(theme, "accentLight") : color(54, 36, 44),
+    outcome === "win" ? themeColor(theme, "accent") : color(18, 18, 28),
+    false, 22);
+  const cx = x + w / 2;
+  const cy = y + h * 0.38;
+  noFill();
+  for (let i = 0; i < 8; i++) {
+    const ang = (TWO_PI / 8) * i + frameCount * 0.002;
+    stroke(outcome === "win" ? 255 : 180, outcome === "win" ? 220 : 80, outcome === "win" ? 170 : 90, 70);
+    strokeWeight(3);
+    line(cx, cy, cx + cos(ang) * w * 0.34, cy + sin(ang) * h * 0.22);
+  }
+  drawClanCrestMark(theme.crest, cx, cy, 28, color(255, 250), 210);
+  if (outcome === "win") {
+    noStroke();
+    for (let i = 0; i < 18; i++) {
+      fill(255, 232, 176, 120);
+      const px = x + (i / 18) * w + sin(frameCount * 0.02 + i) * 10;
+      const py = y + 30 + (i % 5) * 18 + sin(frameCount * 0.04 + i) * 6;
+      ellipse(px, py, 6, 6);
+    }
+  }
+  pop();
 }
 
 function drawEventPopup() {
   fill(0, 90);
   rect(0, 0, width, height);
+  const theme = currentTheme();
 
   const w = min(580, width - 80);
   const h = 320;
@@ -1827,6 +2081,7 @@ function drawEventPopup() {
   const y = (height - h) / 2;
 
   drawPanelCard(x, y, w, h, 22);
+  drawThemeFrame(x, y, w, h, theme, 22);
   fill(166, 124, 64, 34);
   noStroke();
   rect(x + 18, y + 18, w - 36, 46, 14);
@@ -1857,7 +2112,7 @@ function drawEventPopup() {
   text(eventPopup.usedLabel, x + w - 80, y + 32);
 
   const ok = eventPopupOkRect();
-  fillLinearGradientRect(ok.x, ok.y, ok.w, ok.h, color(70, 98, 134), color(42, 62, 88), false, 12);
+  fillLinearGradientRect(ok.x, ok.y, ok.w, ok.h, themeColor(theme, "accent"), themeColor(theme, "accentDark"), false, 12);
   stroke(235, 240, 245, 120);
   strokeWeight(1.3);
   rect(ok.x, ok.y, ok.w, ok.h, 12);
@@ -1870,25 +2125,28 @@ function drawEventPopup() {
 function drawWinPopup() {
   fill(0, 100);
   rect(0, 0, width, height);
+  const theme = gameState === "win" ? clanTheme(HUMAN_PLAYER_ID) : currentTheme();
 
   const w = min(520, width - 100);
   const h = 290;
   const x = (width - w) / 2;
   const y = (height - h) / 2;
 
+  drawOutcomeBackdrop(x, y, w, h, gameState);
   drawPanelCard(x, y, w, h, 22);
+  drawThemeFrame(x, y, w, h, theme, 22);
 
   fill(gameState === "win" ? color(28, 116, 82) : color(168, 52, 52));
   noStroke();
   textAlign(CENTER, CENTER);
-  textSize(28);
-  text(gameState === "win" ? "勝利" : "敗北", x + w / 2, y + 50);
+  textSize(34);
+  text(gameState === "win" ? "勝利" : "敗北", x + w / 2, y + 52);
   fill(40);
-  textSize(16);
-  text(winText, x + 28, y + 92, w - 56, 120);
+  textSize(15);
+  text(winText, x + 28, y + 102, w - 56, 118);
 
   const r = winPopupRestartRect();
-  fillLinearGradientRect(r.x, r.y, r.w, r.h, color(88, 102, 116), color(58, 68, 80), false, 12);
+  fillLinearGradientRect(r.x, r.y, r.w, r.h, themeColor(theme, "accent"), themeColor(theme, "accentDark"), false, 12);
   stroke(240, 242, 244, 120);
   strokeWeight(1.3);
   rect(r.x, r.y, r.w, r.h, 12);
@@ -1901,9 +2159,11 @@ function drawWinPopup() {
 function drawWorkshopBuildPopup() {
   fill(0, 100);
   rect(0, 0, width, height);
+  const theme = currentTheme();
 
   const rectInfo = workshopBuildPopupRect();
   drawPanelCard(rectInfo.x, rectInfo.y, rectInfo.w, rectInfo.h, 22);
+  drawThemeFrame(rectInfo.x, rectInfo.y, rectInfo.w, rectInfo.h, theme, 22);
 
   const t = getTile(workshopBuildPopup.c, workshopBuildPopup.r);
   fill(32, 42, 56);
@@ -1917,8 +2177,8 @@ function drawWorkshopBuildPopup() {
   text(`費用: 金${BUILD_WORKSHOP_COST}`, rectInfo.x + 24, rectInfo.y + 78);
 
   for (const op of workshopBuildOptionRects()) {
-    fillLinearGradientRect(op.x, op.y, op.w, op.h, color(246, 240, 228), color(224, 236, 246), false, 16);
-    stroke(90, 110, 128, 110);
+    fillLinearGradientRect(op.x, op.y, op.w, op.h, themeColor(theme, "panelA"), themeColor(theme, "panelB"), false, 16);
+    stroke(themeColor(theme, "accentDark", 110));
     strokeWeight(1.2);
     rect(op.x, op.y, op.w, op.h, 16);
     noStroke();
@@ -1930,7 +2190,7 @@ function drawWorkshopBuildPopup() {
   }
 
   const c = workshopBuildCancelRect();
-  fillLinearGradientRect(c.x, c.y, c.w, c.h, color(126, 136, 148), color(82, 92, 104), false, 10);
+  fillLinearGradientRect(c.x, c.y, c.w, c.h, themeColor(theme, "accent"), themeColor(theme, "accentDark"), false, 10);
   stroke(240, 244, 246, 110);
   strokeWeight(1.2);
   rect(c.x, c.y, c.w, c.h, 10);
@@ -1946,10 +2206,10 @@ function drawWorkshopBuildPopup() {
 function buildButtons() {
   buttons = [];
   const px = width - UI_W + 18;
-  let py = TOP_H + 128;
+  let py = TOP_H + 220;
   const bw = UI_W - 36;
-  const bh = 30;
-  const gap = 4;
+  const bh = 26;
+  const gap = 3;
   const selectedTile = getTile(selected.c, selected.r);
   const upgradeLabel = canUpgradeBuilding(selectedTile, HUMAN_PLAYER_ID)
     ? `改修 (金${upgradeCost(selectedTile)})`
@@ -1974,11 +2234,12 @@ class Button {
   }
   contains(mx, my) { return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h; }
   draw(enabled = true) {
+    const theme = clanTheme(HUMAN_PLAYER_ID);
     fillLinearGradientRect(this.x, this.y, this.w, this.h,
-      enabled ? color(244, 240, 228) : color(240, 243, 248),
-      enabled ? color(214, 226, 238) : color(226, 230, 236),
+      enabled ? themeColor(theme, "panelA") : color(240, 243, 248),
+      enabled ? themeColor(theme, "panelB") : color(226, 230, 236),
       false, 12);
-    stroke(enabled ? color(74, 94, 120) : color(175, 185, 200));
+    stroke(enabled ? themeColor(theme, "accentDark", 150) : color(175, 185, 200));
     strokeWeight(1.2);
     rect(this.x, this.y, this.w, this.h, 12);
     drawUiIcon(this.iconKind, this.x + 14, this.y + this.h / 2, 8);
@@ -2407,6 +2668,7 @@ function handleAttackTargetClick(c, r) {
 
   me.force -= need;
   playBattleSfx(need);
+  triggerCameraShake(min(14, 6 + need * 0.5), 14);
   if (target.type === TYPE.JO) {
     const maxHp = castleMaxHp(target);
     const hpBefore = target.castleHp > 0 ? target.castleHp : maxHp;
