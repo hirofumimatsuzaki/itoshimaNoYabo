@@ -20,6 +20,7 @@ const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
 const ASSET_REV = "20260419c";
+const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
 const TILE_NAME_FONT = 14;
@@ -354,7 +355,7 @@ function drawStructureArt(tile, x, y, size = 18) {
   const entry = artEntry(id);
   if (!entry || !entry.ready || !entry.img) return false;
   const scale = entry.scale || 1;
-  const h = size * 2.55 * scale;
+  const h = size * 2.55 * scale * STRUCTURE_VISUAL_SCALE;
   const w = h * (entry.img.width / max(1, entry.img.height));
   const anchorY = entry.anchorY == null ? 0.76 : entry.anchorY;
   push();
