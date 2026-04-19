@@ -377,19 +377,23 @@ function drawStartPickPopup() {
 
   for (const op of startPickOptionRects()) {
     const theme = clanTheme(op.id);
-    fillLinearGradientRect(op.x, op.y, op.w, op.h, themeColor(theme, "panelA"), themeColor(theme, "panelB"), false, 14);
-    stroke(themeColor(theme, "accentDark", 120));
-    strokeWeight(1.3);
+    fill(255);
+    noStroke();
+    rect(op.x + 5, op.y + 7, op.w, op.h, 14);
+    stroke(32, 32, 32, 180);
+    strokeWeight(1.4);
+    fill(255);
     rect(op.x, op.y, op.w, op.h, 14);
     drawClanCrestMark(theme.crest, op.x + op.w - 22, op.y + 22, 9, themeColor(theme, "accentDark"), 190);
     noStroke();
-    fill(themeColor(theme, "accentDark"));
+    fill(0);
     textSize(18);
     textAlign(LEFT, TOP);
     text(op.name, op.x + 12, op.y + 10);
     textSize(12);
-    fill(75);
+    fill(0);
     text(`拠点: ${op.base}`, op.x + 12, op.y + 42);
+    fill(40);
     text("クリックで開始", op.x + 12, op.y + 68);
   }
 }
@@ -569,12 +573,77 @@ function drawIsoRoof(x, y, w, d, h, roofCol = [160, 74, 66], edgeCol = [80, 40, 
   endShape(CLOSE);
 }
 
+function drawCastleWindows(x, y, size, level) {
+  noStroke();
+  fill(74, 54, 46, 190);
+  rect(x - size * 0.18, y - size * 0.55, size * 0.08, size * 0.13, 2);
+  rect(x + size * 0.1, y - size * 0.55, size * 0.08, size * 0.13, 2);
+  if (level >= 2) {
+    rect(x - size * 0.62, y - size * 0.35, size * 0.06, size * 0.11, 2);
+    rect(x + size * 0.56, y - size * 0.35, size * 0.06, size * 0.11, 2);
+  }
+  if (level >= 3) {
+    rect(x - size * 0.05, y - size * 0.9, size * 0.05, size * 0.09, 2);
+  }
+}
+
+function drawStoneSteps(x, y, size, steps = 3) {
+  noStroke();
+  for (let i = 0; i < steps; i++) {
+    const w = size * (0.28 + i * 0.12);
+    fill(188 - i * 10, 176 - i * 8, 162 - i * 6, 230);
+    rect(x - w / 2, y + i * size * 0.06, w, size * 0.05, 2);
+  }
+}
+
+function drawLantern(x, y, size, glow = [255, 226, 164]) {
+  stroke(92, 76, 60, 170);
+  strokeWeight(1.1);
+  line(x, y, x, y - size * 0.42);
+  noStroke();
+  fill(236, 226, 212, 230);
+  rect(x - size * 0.08, y - size * 0.34, size * 0.16, size * 0.18, 2);
+  fill(glow[0], glow[1], glow[2], 120);
+  ellipse(x, y - size * 0.25, size * 0.2, size * 0.16);
+}
+
+function drawWorkshopProps(x, y, size, kind) {
+  noStroke();
+  fill(116, 84, 58, 220);
+  rect(x - size * 0.56, y + size * 0.1, size * 0.16, size * 0.2, 3);
+  rect(x - size * 0.34, y + size * 0.14, size * 0.14, size * 0.16, 3);
+  if (kind === WORKSHOP_KIND.WASHI) {
+    fill(248, 245, 236, 235);
+    rect(x - size * 0.68, y - size * 0.16, size * 0.2, size * 0.12, 2);
+  } else if (kind === WORKSHOP_KIND.POTTERY) {
+    fill(174, 110, 76, 230);
+    ellipse(x - size * 0.58, y + size * 0.06, size * 0.13, size * 0.14);
+  } else if (kind === WORKSHOP_KIND.FABLAB) {
+    fill(132, 182, 214, 220);
+    rect(x - size * 0.7, y - size * 0.12, size * 0.18, size * 0.08, 2);
+  }
+}
+
+function drawHarborBoat(x, y, size) {
+  noStroke();
+  fill(112, 76, 48, 220);
+  quad(x - size * 0.34, y, x + size * 0.18, y, x + size * 0.3, y + size * 0.08, x - size * 0.28, y + size * 0.08);
+  stroke(96, 78, 58, 180);
+  strokeWeight(1.1);
+  line(x - size * 0.04, y, x - size * 0.04, y - size * 0.34);
+  noStroke();
+  fill(246, 244, 232, 210);
+  triangle(x - size * 0.04, y - size * 0.34, x - size * 0.04, y - size * 0.08, x + size * 0.18, y - size * 0.16);
+}
+
 function drawCastleStructure(tile, x, y, size) {
   const level = buildingLevel(tile);
 
+  drawIsoPrism(x, y + size * 0.16, size * 1.12, size * 0.72, size * 0.22, [170, 158, 146], [144, 130, 118], [132, 118, 108]);
   drawIsoPrism(x, y + size * 0.04, size * 0.9, size * 0.58, size * 0.42, [198, 184, 164], [168, 150, 132], [154, 138, 122]);
   drawIsoPrism(x, y - size * 0.02, size * 0.86, size * 0.56, size * 0.72, [220, 207, 188], [190, 172, 152], [176, 158, 140]);
   drawIsoRoof(x, y - size * 0.04, size * 0.9, size * 0.58, size * 0.72, [130, 78, 66], [74, 42, 38]);
+  drawStoneSteps(x, y + size * 0.16, size, 4);
 
   drawIsoPrism(x - size * 0.5, y - size * 0.08, size * 0.34, size * 0.28, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
   drawIsoPrism(x + size * 0.5, y - size * 0.08, size * 0.34, size * 0.28, size * 0.58, [226, 214, 198], [198, 181, 162], [184, 169, 152]);
@@ -594,6 +663,7 @@ function drawCastleStructure(tile, x, y, size) {
     drawIsoRoof(x - size * 0.82, y - size * 0.14, size * 0.22, size * 0.18, size * 0.42, [118, 72, 64], [70, 42, 38]);
     drawIsoRoof(x + size * 0.82, y - size * 0.14, size * 0.22, size * 0.18, size * 0.42, [118, 72, 64], [70, 42, 38]);
   }
+  drawCastleWindows(x, y, size, level);
 }
 
 function drawCastleAnimation(tile, x, y, size) {
@@ -680,6 +750,7 @@ function drawIsoStructure(tile, x, y, size = 18) {
   }
   if (t === TYPE.MINATO) {
     drawHarborPier(x, y + size * 0.12, size * 0.86, isFishingPort(tile));
+    drawHarborBoat(x - size * 0.28, y + size * 0.18, size * 0.72);
     drawIsoPrism(x + size * 0.32, y - size * 0.05, size * 0.62, size * 0.42, size * 0.42, [214, 222, 236], [186, 197, 216], [168, 179, 198]);
     drawIsoRoof(x + size * 0.32, y - size * 0.08, size * 0.6, size * 0.42, size * 0.42, [94, 132, 176], [56, 82, 118]);
     if (isFishingPort(tile)) {
@@ -696,6 +767,8 @@ function drawIsoStructure(tile, x, y, size = 18) {
     return;
   }
   if (t === TYPE.KOBO) {
+    const kind = workshopKind(tile);
+    drawIsoPrism(x, y + size * 0.14, size * 1.02, size * 0.62, size * 0.18, [158, 142, 126], [132, 118, 106], [120, 108, 98]);
     drawIsoPrism(x, y + size * 0.08, size * 0.9, size * 0.56, size * 0.56, [232, 196, 156], [205, 166, 126], [190, 152, 114]);
     drawIsoRoof(x, y + size * 0.06, size * 0.9, size * 0.54, size * 0.56, [120, 88, 72], [70, 52, 45]);
     stroke(86, 68, 58, 180);
@@ -704,16 +777,27 @@ function drawIsoStructure(tile, x, y, size = 18) {
     noStroke();
     fill(170, 170, 170, 140);
     ellipse(x + size * 0.28, y - size * 1.08 + sin(frameCount * 0.07) * 1.2, size * 0.16, size * 0.12);
+    fill(92, 70, 52, 180);
+    rect(x - size * 0.12, y - size * 0.08, size * 0.16, size * 0.22, 2);
+    rect(x + size * 0.12, y - size * 0.04, size * 0.14, size * 0.12, 2);
+    drawWorkshopProps(x, y, size, kind);
     drawWorkshopAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.TERA) {
+    drawStoneSteps(x, y + size * 0.16, size, 3);
     drawIsoPrism(x, y + size * 0.08, size * 0.94, size * 0.58, size * 0.5, [236, 224, 208], [210, 195, 178], [196, 182, 166]);
     drawIsoRoof(x, y + size * 0.06, size * 1.15, size * 0.72, size * 0.5, [108, 90, 86], [64, 54, 52]);
+    fill(84, 60, 46, 170);
+    noStroke();
+    rect(x - size * 0.1, y - size * 0.02, size * 0.18, size * 0.22, 2);
+    drawLantern(x - size * 0.56, y + size * 0.08, size * 0.9, [255, 232, 188]);
+    drawLantern(x + size * 0.56, y + size * 0.08, size * 0.9, [255, 232, 188]);
     drawShrineAnimation(tile, x, y, size);
     return;
   }
   if (t === TYPE.JINJA) {
+    drawStoneSteps(x, y + size * 0.18, size * 0.92, 3);
     drawIsoPrism(x, y + size * 0.1, size * 0.86, size * 0.52, size * 0.46, [246, 232, 220], [224, 208, 194], [208, 192, 178]);
     drawIsoRoof(x, y + size * 0.09, size * 0.94, size * 0.54, size * 0.46, [190, 72, 66], [112, 46, 42]);
     stroke(188, 62, 56);
@@ -721,6 +805,11 @@ function drawIsoStructure(tile, x, y, size = 18) {
     line(x - size * 0.65, y + size * 0.22, x - size * 0.65, y - size * 0.32);
     line(x + size * 0.65, y + size * 0.22, x + size * 0.65, y - size * 0.32);
     line(x - size * 0.85, y - size * 0.34, x + size * 0.85, y - size * 0.34);
+    noStroke();
+    fill(244, 236, 224, 220);
+    rect(x - size * 0.1, y - size * 0.02, size * 0.18, size * 0.2, 2);
+    drawLantern(x - size * 0.64, y + size * 0.08, size * 0.88, [255, 220, 156]);
+    drawLantern(x + size * 0.64, y + size * 0.08, size * 0.88, [255, 220, 156]);
     drawShrineAnimation(tile, x, y, size);
     return;
   }
