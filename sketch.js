@@ -15,9 +15,9 @@ const ISO_SHEAR_X = 0.48;
 const ISO_SCALE_Y = 0.75;
 const ISO_OFFSET_X = 54;
 const ISO_OFFSET_Y = 10;
-const ISO_TILE_W = HEX_W * 1.18;
-const ISO_TILE_H = HEX_SIZE * 1.22;
-const ISO_TILE_DEPTH = HEX_SIZE * 0.42;
+const ISO_TILE_W = HEX_W * 1.02;
+const ISO_TILE_H = HEX_SIZE * 0.9;
+const ISO_TILE_DEPTH = HEX_SIZE * 0.34;
 
 // ---------- UI ----------
 const UI_W = 320;
@@ -276,6 +276,7 @@ function structureArtId(tile) {
   if (tile.type === TYPE.MINATO) return "structures.port";
   if (tile.type === TYPE.JINJA) return "structures.shrine";
   if (tile.type === TYPE.TERA) return "structures.temple";
+  if (tile.type === TYPE.YAMA) return "structures.mountain";
   if (tile.type === TYPE.KOBO) {
     const kind = workshopKind(tile);
     if (kind === WORKSHOP_KIND.FABLAB) return "structures.workshopFablab";
@@ -1141,19 +1142,26 @@ function drawIsoTileShadowScreen(sx, sy, scale = 1, alpha = 34) {
 function drawTerrainArtTile(tile, sx, sy, scale = 1) {
   const entry = artEntry(terrainArtId(tile));
   if (!entry || !entry.ready || !entry.img) return false;
-  const m = isoTileMetrics(scale);
-  const w = m.w * 2.32 * (entry.scale || 1);
-  const h = w * (entry.img.height / max(1, entry.img.width));
+  const top = isoTileTopPointsScreen(sx, sy, scale);
+  const xs = top.map((p) => p.x);
+  const ys = top.map((p) => p.y);
+  const minX = min(...xs);
+  const maxX = max(...xs);
+  const minY = min(...ys);
+  const maxY = max(...ys);
+  const pad = 6 * scale;
   push();
-  imageMode(CENTER);
+  drawingContext.save();
+  clipToPolygon(top);
   tint(255, entry.alpha || 255);
-  image(entry.img, sx, sy + m.depth * 0.18, w, h);
+  drawImageCover(entry.img, minX - pad, minY - pad, (maxX - minX) + pad * 2, (maxY - minY) + pad * 2);
   noTint();
+  drawingContext.restore();
   pop();
   return true;
 }
 
-function drawIsoTerrainFallback(tile, sx, sy, scale = 1) {
+function drawIsoTerrainShell(tile, sx, sy, scale = 1) {
   const top = isoTileTopPointsScreen(sx, sy, scale);
   const right = isoTileRightFacePointsScreen(sx, sy, scale);
   const left = isoTileLeftFacePointsScreen(sx, sy, scale);
@@ -1168,6 +1176,10 @@ function drawIsoTerrainFallback(tile, sx, sy, scale = 1) {
   drawPolygon(right);
   fill(topCol);
   drawPolygon(top);
+}
+
+function drawIsoTerrainFallback(tile, sx, sy, scale = 1) {
+  const top = isoTileTopPointsScreen(sx, sy, scale);
   stroke(255, 255, 255, tile.type === TYPE.UMI ? 56 : 90);
   strokeWeight(1.1);
   line(top[0].x, top[0].y, top[1].x, top[1].y);
@@ -1188,7 +1200,15 @@ function drawIsoTerrainFallback(tile, sx, sy, scale = 1) {
 function drawHexTileBase(tile, cx, cy, size) {
   const ctr = projectPoint(cx, cy);
   drawIsoTileShadowScreen(ctr.x, ctr.y, size / HEX_SIZE);
-  if (!drawTerrainArtTile(tile, ctr.x, ctr.y, size / HEX_SIZE)) {
+  drawIsoTerrainShell(tile, ctr.x, ctr.y, size / HEX_SIZE);
+  if (drawTerrainArtTile(tile, ctr.x, ctr.y, size / HEX_SIZE)) {
+    const top = isoTileTopPointsScreen(ctr.x, ctr.y, size / HEX_SIZE);
+    stroke(255, 255, 255, tile.type === TYPE.UMI ? 44 : 70);
+    strokeWeight(1);
+    line(top[0].x, top[0].y, top[1].x, top[1].y);
+    line(top[0].x, top[0].y, top[3].x, top[3].y);
+    noStroke();
+  } else {
     drawIsoTerrainFallback(tile, ctr.x, ctr.y, size / HEX_SIZE);
   }
 }
