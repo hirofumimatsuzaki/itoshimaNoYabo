@@ -1421,19 +1421,19 @@ function drawTopResourceLine(p, eventState, ap, x, y) {
   let cx = x;
   for (const [kind, value] of resourcePairs(p)) {
     drawUiIcon(kind, cx + 5, y, 6);
-    fill(245);
+    fill(0);
     text(`${value}`, cx + 14, y);
     cx += 38;
   }
   drawUiIcon("event", cx + 5, y, 6);
-  fill(245);
+  fill(0);
   text(eventState, cx + 14, y);
   cx += 70;
   drawUiIcon("action", cx + 5, y, 6);
-  fill(245);
+  fill(0);
   text(`${ap}/${ACTIONS_PER_TURN}`, cx + 14, y);
   cx += 54;
-  fill(245);
+  fill(0);
   text(`季節:${seasonState.name}`, cx + 2, y);
 }
 
