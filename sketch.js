@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260419c";
+const ASSET_REV = "20260422a";
 const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
@@ -140,6 +140,23 @@ const ART_SPRITES = {
     workshopPottery: { path: `assets/structure-workshop-pottery.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
     mountain: { path: `assets/structure-mountain.png?v=${ASSET_REV}`, scale: 1.16, anchorY: 0.8 },
   },
+  events: {
+    C01: { path: `assets/event-C01.png?v=${ASSET_REV}` },
+    C02: { path: `assets/event-C02.png?v=${ASSET_REV}` },
+    C03: { path: `assets/event-C03.png?v=${ASSET_REV}` },
+    C04: { path: `assets/event-C04.png?v=${ASSET_REV}` },
+    C05: { path: `assets/event-C05.png?v=${ASSET_REV}` },
+    C06: { path: `assets/event-C06.png?v=${ASSET_REV}` },
+    C07: { path: `assets/event-C07.png?v=${ASSET_REV}` },
+    C08: { path: `assets/event-C08.png?v=${ASSET_REV}` },
+    E01: { path: `assets/event-E01.png?v=${ASSET_REV}` },
+    E02: { path: `assets/event-E02.png?v=${ASSET_REV}` },
+    W01: { path: `assets/event-C03.png?v=${ASSET_REV}` },
+    W02: { path: `assets/event-W02.png?v=${ASSET_REV}` },
+    W03: { path: `assets/event-W03.png?v=${ASSET_REV}` },
+    H01: { path: `assets/event-E01.png?v=${ASSET_REV}` },
+    H02: { path: `assets/event-C04.png?v=${ASSET_REV}` },
+  },
 };
 
 // ---------- 迥ｶ諷・----------
@@ -185,6 +202,7 @@ let eventPopup = {
   effectText: "",
   usedLabel: "",
   cardId: "",
+  artId: "",
 };
 let workshopBuildPopup = { open: false, c: -1, r: -1 };
 let battlePopup = {
@@ -411,7 +429,7 @@ function openStartPickPopup() {
   message = "開始勢力を選んでください。";
 }
 
-function openInfoPopup(title, desc, effectText, usedLabel = "確認", cardId = "") {
+function openInfoPopup(title, desc, effectText, usedLabel = "確認", cardId = "", artId = "") {
   eventPopup = {
     open: true,
     title,
@@ -419,6 +437,7 @@ function openInfoPopup(title, desc, effectText, usedLabel = "確認", cardId = "
     effectText,
     usedLabel,
     cardId,
+    artId,
   };
 }
 
@@ -2545,8 +2564,8 @@ function drawEventPopup() {
   rect(0, 0, width, height);
   const theme = currentTheme();
 
-  const w = min(580, width - 80);
-  const h = 320;
+  const w = min(700, width - 80);
+  const h = 440;
   const x = (width - w) / 2;
   const y = (height - h) / 2;
 
@@ -2566,13 +2585,31 @@ function drawEventPopup() {
   textSize(12);
   text(`ID: ${eventPopup.cardId}`, x + 24, y + 56);
 
+  const artId = eventPopup.artId || eventPopup.cardId;
+  const art = artEntry(`events.${artId}`);
+  const artX = x + 24;
+  const artY = y + 78;
+  const artW = w - 48;
+  const artH = 178;
+  if (art && art.ready && art.img) {
+    drawEventArtImage(art.img, artX, artY, artW, artH);
+  } else {
+    fill(238, 230, 214);
+    rect(artX, artY, artW, artH, 18);
+    fill(120);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    text("情景画を読込中", artX + artW / 2, artY + artH / 2);
+  }
+
   fill(40);
+  textAlign(LEFT, TOP);
   textSize(15);
-  text(eventPopup.desc, x + 24, y + 86, w - 48, 90);
+  text(eventPopup.desc, x + 24, y + 270, w - 48, 52);
 
   fill(30);
   textSize(14);
-  text(eventPopup.effectText, x + 24, y + 186, w - 48, 56);
+  text(eventPopup.effectText, x + 24, y + 328, w - 48, 54);
 
   fill(242, 228, 196);
   rect(x + w - 130, y + 18, 100, 28, 14);
@@ -2582,14 +2619,46 @@ function drawEventPopup() {
   text(eventPopup.usedLabel, x + w - 80, y + 32);
 
   const ok = eventPopupOkRect();
-  fillLinearGradientRect(ok.x, ok.y, ok.w, ok.h, themeColor(theme, "accent"), themeColor(theme, "accentDark"), false, 12);
-  stroke(235, 240, 245, 120);
-  strokeWeight(1.3);
+  fill(255);
+  stroke(28, 34, 44, 130);
+  strokeWeight(1.4);
   rect(ok.x, ok.y, ok.w, ok.h, 12);
   noStroke();
-  fill(246);
+  fill(0);
   textSize(16);
   text("OK", ok.x + ok.w / 2, ok.y + ok.h / 2);
+}
+
+function drawEventArtImage(img, x, y, w, h) {
+  push();
+  fill(25, 28, 34);
+  noStroke();
+  rect(x, y, w, h, 18);
+  drawingContext.save();
+  roundedRectPath(drawingContext, x, y, w, h, 18);
+  drawingContext.clip();
+  drawImageCover(img, x, y, w, h);
+  drawingContext.restore();
+  noFill();
+  stroke(255, 255, 255, 100);
+  strokeWeight(1.4);
+  rect(x, y, w, h, 18);
+  pop();
+}
+
+function roundedRectPath(ctx, x, y, w, h, r) {
+  const radius = min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }
 
 function drawWinPopup() {
@@ -3272,6 +3341,7 @@ function actionEvent() {
     effectText,
     usedLabel: "使用済",
     cardId: card.id,
+    artId: card.id,
   };
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
@@ -4592,8 +4662,8 @@ function tileIcon(tileOrType) {
 }
 
 function eventPopupRect() {
-  const w = min(580, width - 80);
-  const h = 320;
+  const w = min(700, width - 80);
+  const h = 440;
   return { x: (width - w) / 2, y: (height - h) / 2, w, h };
 }
 
