@@ -4286,20 +4286,28 @@ function drawHex(cx, cy, size) {
 function pickHex(mx, my) {
   let hit = null;
   let hitDist = 1e9;
+  let nearHit = null;
+  let nearDist = 1e9;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const ctr = centers[r][c];
+      const p = projectPoint(ctr.x, ctr.y);
       if (pointInHex(mx, my, ctr.x, ctr.y, HEX_SIZE)) {
-        const p = projectPoint(ctr.x, ctr.y);
         const d = dist(mx, my, p.x, p.y);
         if (d < hitDist) {
           hitDist = d;
           hit = { c, r };
         }
+      } else if (pointNearTileVisual(mx, my, ctr.x, ctr.y, HEX_SIZE)) {
+        const d = dist(mx, my, p.x, p.y);
+        if (d < nearDist) {
+          nearDist = d;
+          nearHit = { c, r };
+        }
       }
     }
   }
-  return hit;
+  return hit || nearHit;
 }
 
 function pointInHex(px, py, cx, cy, size) {
@@ -4313,6 +4321,17 @@ function pointInHex(px, py, cx, cy, size) {
     if (cross) inside = !inside;
   }
   return inside;
+}
+
+function pointNearTileVisual(px, py, cx, cy, size) {
+  const ctr = projectPoint(cx, cy);
+  const m = isoTileMetrics(size / HEX_SIZE);
+  const dx = abs(px - ctr.x);
+  const dy = py - ctr.y;
+  const topArea = (dx / (m.w * 0.68)) + (abs(dy) / (m.h * 0.95)) <= 1.2;
+  if (topArea) return true;
+  const structureArea = dy < 0 && dx <= m.w * 0.62 && abs(dy) <= m.h * 1.75;
+  return structureArea;
 }
 
 function worldToScreen(wx, wy) {
