@@ -187,6 +187,16 @@ let eventPopup = {
   cardId: "",
 };
 let workshopBuildPopup = { open: false, c: -1, r: -1 };
+let battlePopup = {
+  open: false,
+  phase: "choose",
+  from: null,
+  target: null,
+  need: 0,
+  tacticId: "",
+  resultText: "",
+  resultLines: [],
+};
 let tileFx = [];
 
 let buttons = [];
@@ -1860,6 +1870,7 @@ function draw() {
   if (eventPopup.open) drawEventPopup();
   if (workshopBuildPopup.open) drawWorkshopBuildPopup();
   if (gameState !== "playing") drawWinPopup();
+  if (battlePopup.open) drawBattlePopup();
   if (startPickPopup.open) drawStartPickPopup();
   updateSoundtrack();
 }
@@ -1886,6 +1897,11 @@ function mousePressed() {
     if (picked) {
       buildWorkshopSelected(picked.kind);
     }
+    return;
+  }
+
+  if (battlePopup.open) {
+    handleBattlePopupClick(mouseX, mouseY);
     return;
   }
 
@@ -2655,6 +2671,116 @@ function drawWorkshopBuildPopup() {
   text("キャンセル", c.x + c.w / 2, c.y + c.h / 2);
 }
 
+function drawBattlePopup() {
+  fill(0, 120);
+  rect(0, 0, width, height);
+  const theme = currentTheme();
+  const r = battleRect();
+  const from = battlePopup.from ? getTile(battlePopup.from.c, battlePopup.from.r) : null;
+  const target = battlePopup.target ? getTile(battlePopup.target.c, battlePopup.target.r) : null;
+  if (!from || !target) return;
+  const attackerOfficer = battleAttackerOfficer();
+  const defender = tileDefenseProfile(target);
+
+  drawPanelCard(r.x, r.y, r.w, r.h, 24);
+  drawThemeFrame(r.x, r.y, r.w, r.h, theme, 24);
+  fill(32, 42, 56);
+  noStroke();
+  textAlign(LEFT, TOP);
+  textSize(25);
+  text(target.type === TYPE.JO ? "攻城戦" : (target.type === TYPE.JINJA || target.type === TYPE.TERA) ? "制圧戦" : "急襲戦", r.x + 26, r.y + 22);
+  textSize(13);
+  fill(72, 78, 88);
+  text(`${tileLabel(from)} から ${tileLabel(target)} へ進軍`, r.x + 28, r.y + 58);
+
+  const leftX = r.x + 28;
+  const rightX = r.x + r.w / 2 + 20;
+  fill(246, 248, 244, 225);
+  rect(leftX, r.y + 88, r.w / 2 - 48, 92, 16);
+  rect(rightX, r.y + 88, r.w / 2 - 48, 92, 16);
+  fill(28, 42, 58);
+  textSize(15);
+  text("攻撃側", leftX + 16, r.y + 104);
+  text("防御側", rightX + 16, r.y + 104);
+  textSize(13);
+  fill(45, 52, 60);
+  text(`兵力: 武力${playerById(HUMAN_PLAYER_ID).force} / 基本消費${battlePopup.need}`, leftX + 16, r.y + 130);
+  text(attackerOfficer ? `先鋒: ${attackerOfficer.name} 武${attackerOfficer.valor} 知${attackerOfficer.wit} 政${attackerOfficer.admin}` : "先鋒: 足軽隊のみ", leftX + 16, r.y + 152);
+  const hpText = target.type === TYPE.JO ? ` / 耐久${target.castleHp || castleMaxHp(target)}/${castleMaxHp(target)}` : "";
+  text(`拠点: ${tileLabel(target)}${hpText}`, rightX + 16, r.y + 130);
+  text(defender.desc, rightX + 16, r.y + 152);
+
+  if (battlePopup.phase === "result") {
+    fill(30, 36, 44);
+    textSize(15);
+    text("戦闘結果", r.x + 28, r.y + 206);
+    textSize(13);
+    fill(48, 54, 62);
+    text(battlePopup.resultLines.join("\n"), r.x + 28, r.y + 236, r.w - 56, 110);
+    const ok = battleOkRect();
+    drawBattleButton(ok, "マップへ戻る", true, theme);
+    return;
+  }
+
+  fill(30, 36, 44);
+  textSize(15);
+  text("戦術を選択", r.x + 28, r.y + 188);
+  for (const box of battleTacticRects()) {
+    const cost = tacticCost(battlePopup.need, box.tactic);
+    const enabled = tacticAvailable(box.tactic, target, cost);
+    fill(enabled ? color(255) : color(226, 226, 226));
+    stroke(enabled ? color(48, 56, 66) : color(150));
+    strokeWeight(1.2);
+    rect(box.x, box.y, box.w, box.h, 14);
+    noStroke();
+    fill(enabled ? color(0) : color(100));
+    textAlign(LEFT, TOP);
+    textSize(14);
+    text(`${box.tactic.name}  武力-${cost}`, box.x + 14, box.y + 9);
+    textSize(11);
+    text(box.tactic.desc, box.x + 14, box.y + 30, box.w - 28, 24);
+  }
+  drawBattleButton(battleCancelRect(), "中止", true, theme);
+}
+
+function drawBattleButton(r, label, enabled, theme) {
+  fill(enabled ? 255 : 226);
+  stroke(enabled ? themeColor(theme, "accentDark") : color(150));
+  strokeWeight(1.2);
+  rect(r.x, r.y, r.w, r.h, 12);
+  noStroke();
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(14);
+  text(label, r.x + r.w / 2, r.y + r.h / 2);
+}
+
+function rectContains(rectInfo, mx, my) {
+  return mx >= rectInfo.x && mx <= rectInfo.x + rectInfo.w && my >= rectInfo.y && my <= rectInfo.y + rectInfo.h;
+}
+
+function handleBattlePopupClick(mx, my) {
+  if (battlePopup.phase === "result") {
+    if (rectContains(battleOkRect(), mx, my)) battlePopup.open = false;
+    return;
+  }
+  if (rectContains(battleCancelRect(), mx, my)) {
+    battlePopup.open = false;
+    attackMode = { active: false, from: null };
+    message = "攻撃を中止しました。";
+    return;
+  }
+  const target = battlePopup.target ? getTile(battlePopup.target.c, battlePopup.target.r) : null;
+  if (!target) return;
+  for (const box of battleTacticRects()) {
+    const cost = tacticCost(battlePopup.need, box.tactic);
+    if (rectContains(box, mx, my) && tacticAvailable(box.tactic, target, cost)) {
+      resolveBattleTactic(box.tactic);
+      return;
+    }
+  }
+}
+
 // ------------------ 繝懊ち繝ｳ ------------------
 
 function buildButtons() {
@@ -2974,6 +3100,137 @@ function attackTargetStatus(attacker, from, target) {
   return { ok: true, need };
 }
 
+const BATTLE_TACTICS = [
+  {
+    id: "assault",
+    name: "強攻",
+    desc: "武勇で押し切る。城耐久を大きく削るが消耗も重い。",
+    stat: "valor",
+    costMod: 1,
+    baseDamage: 2,
+    targetTypes: null,
+  },
+  {
+    id: "siege",
+    name: "包囲",
+    desc: "堅実に包囲する。守将がいない拠点に安定して効く。",
+    stat: "admin",
+    costMod: 0,
+    baseDamage: 1,
+    targetTypes: null,
+  },
+  {
+    id: "raid",
+    name: "奇襲",
+    desc: "知略で混乱を狙う。成功すれば消耗を抑えて制圧しやすい。",
+    stat: "wit",
+    costMod: 0,
+    baseDamage: 1,
+    targetTypes: null,
+  },
+  {
+    id: "persuade",
+    name: "調略",
+    desc: "守備の心を崩す。神社・寺・守将なし拠点で特に有効。",
+    stat: "wit",
+    costMod: -1,
+    baseDamage: 1,
+    targetTypes: [TYPE.JINJA, TYPE.TERA, TYPE.KOBO, TYPE.MINATO],
+  },
+  {
+    id: "duel",
+    name: "一騎駆け",
+    desc: "猛将向け。守将や足軽隊を圧倒できれば一気に士気を折る。",
+    stat: "valor",
+    costMod: 0,
+    baseDamage: 1,
+    targetTypes: null,
+  },
+];
+
+function battleRect() {
+  const w = min(760, width - 80);
+  const h = 430;
+  return { x: (width - w) / 2, y: (height - h) / 2, w, h };
+}
+
+function battleTacticRects() {
+  const r = battleRect();
+  const cardW = (r.w - 64) / 2;
+  const cardH = 58;
+  return BATTLE_TACTICS.map((tactic, i) => ({
+    tactic,
+    x: r.x + 24 + (i % 2) * (cardW + 16),
+    y: r.y + 208 + floor(i / 2) * (cardH + 10),
+    w: cardW,
+    h: cardH,
+  }));
+}
+
+function battleOkRect() {
+  const r = battleRect();
+  return { x: r.x + r.w - 142, y: r.y + r.h - 58, w: 118, h: 34 };
+}
+
+function battleCancelRect() {
+  const r = battleRect();
+  return { x: r.x + 24, y: r.y + r.h - 58, w: 118, h: 34 };
+}
+
+function tileDefenseProfile(tile) {
+  const guard = garrisonOfficer(tile);
+  if (guard) {
+    return {
+      name: guard.name,
+      label: `${guard.name} (${guard.role})`,
+      valor: guard.valor,
+      wit: guard.wit,
+      admin: guard.admin,
+      desc: `守将: 武${guard.valor} 知${guard.wit} 政${guard.admin}`,
+      hasOfficer: true,
+    };
+  }
+  const base = tile.type === TYPE.JO ? 4 : (tile.type === TYPE.JINJA || tile.type === TYPE.TERA) ? 3 : 2;
+  return {
+    name: "足軽守備隊",
+    label: "足軽守備隊",
+    valor: base,
+    wit: max(1, base - 1),
+    admin: max(1, base - 1),
+    desc: `守将なし: 足軽隊 武${base} 知${max(1, base - 1)} 政${max(1, base - 1)}`,
+    hasOfficer: false,
+  };
+}
+
+function battleAttackerOfficer() {
+  return leadOfficer(HUMAN_PLAYER_ID, "attack");
+}
+
+function tacticAvailable(tactic, target, cost) {
+  const me = playerById(HUMAN_PLAYER_ID);
+  if (!me || me.force < cost) return false;
+  if (!tactic.targetTypes) return true;
+  return tactic.targetTypes.includes(target.type) || !tileDefenseProfile(target).hasOfficer;
+}
+
+function tacticCost(baseNeed, tactic) {
+  return max(1, baseNeed + (tactic.costMod || 0));
+}
+
+function openBattlePopup(from, target, need) {
+  battlePopup = {
+    open: true,
+    phase: "choose",
+    from: { c: from.c, r: from.r },
+    target: { c: target.c, r: target.r },
+    need,
+    tacticId: "",
+    resultText: "",
+    resultLines: [],
+  };
+  message = `${tileLabel(target)} 攻撃: 戦術を選んでください。`;
+}
+
 function actionAttack() {
   if (!canPlayerAct()) return;
   const me = players[currentPlayer];
@@ -3145,23 +3402,83 @@ function handleAttackTargetClick(c, r) {
     return;
   }
   const need = status.need;
+  openBattlePopup(from, target, need);
+}
 
-  me.force -= need;
-  playBattleSfx(need);
-  triggerCameraShake(min(14, 6 + need * 0.5), 14);
+function resolveBattleTactic(tactic) {
+  if (!battlePopup.open || battlePopup.phase !== "choose") return;
+  const me = players[currentPlayer];
+  const from = getTile(battlePopup.from.c, battlePopup.from.r);
+  const target = getTile(battlePopup.target.c, battlePopup.target.r);
+  if (!from || !target || from.owner !== me.id) {
+    battlePopup.open = false;
+    attackMode = { active: false, from: null };
+    message = "攻撃元が無効になりました。";
+    return;
+  }
+  const baseNeed = battlePopup.need;
+  const finalCost = tacticCost(baseNeed, tactic);
+  if (!tacticAvailable(tactic, target, finalCost)) {
+    message = `${tactic.name} は条件を満たしていません。`;
+    return;
+  }
+
+  const attackerOfficer = battleAttackerOfficer();
+  const defender = tileDefenseProfile(target);
+  const attackStat = attackerOfficer ? (attackerOfficer[tactic.stat] || 0) : 3;
+  const defenseStat = defender[tactic.stat] || 1;
+  const roll = floor(random(1, 7));
+  const score = attackStat + roll + (tactic.id === "persuade" && (target.type === TYPE.JINJA || target.type === TYPE.TERA) ? 2 : 0);
+  const defenseScore = defenseStat + (defender.hasOfficer ? 3 : 1) + buildingLevelBonus(target);
+  const success = score >= defenseScore;
+  let damage = tactic.baseDamage + (success ? 1 : 0);
+  if (tactic.id === "siege" && target.type === TYPE.JO) damage += 1;
+  if (tactic.id === "duel" && success && attackStat >= defenseStat + 2) damage += 1;
+  if (tactic.id === "raid" && !success) damage = max(0, damage - 1);
+  if (target.type !== TYPE.JO && success) damage += 1;
+  damage = max(0, damage);
+
+  me.force -= finalCost;
+  playBattleSfx(finalCost);
+  triggerCameraShake(min(14, 6 + finalCost * 0.5), 14);
+
+  const lines = [
+    `${tactic.name}: ${attackerOfficer ? `${attackerOfficer.name}が指揮` : "足軽隊が前進"}`,
+    `${defender.desc}`,
+    `判定: 攻${score} vs 守${defenseScore} / ${success ? "成功" : "苦戦"}`,
+  ];
   if (target.type === TYPE.JO) {
     const maxHp = castleMaxHp(target);
     const hpBefore = target.castleHp > 0 ? target.castleHp : maxHp;
-    const hpAfter = max(0, hpBefore - 1);
+    const hpAfter = max(0, hpBefore - damage);
     target.castleHp = hpAfter;
     pushTileFx(target.c, target.r, hpAfter > 0 ? `攻城 ${hpAfter}/${maxHp}` : "陥落", color(220, 70, 70));
     if (hpAfter > 0) {
-      message = `攻城: ${tileLabel(target)} の耐久 ${hpAfter}/${maxHp} (武力-${need})`;
+      lines.push(`城耐久: ${hpBefore}/${maxHp} -> ${hpAfter}/${maxHp}`);
+      message = `攻城: ${tileLabel(target)} の耐久 ${hpAfter}/${maxHp} (武力-${finalCost})`;
       attackMode = { active: false, from: null };
       spendAction(me.id);
       message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+      battlePopup.phase = "result";
+      battlePopup.tacticId = tactic.id;
+      battlePopup.resultText = message;
+      battlePopup.resultLines = lines;
       return;
     }
+    lines.push(`城耐久: ${hpBefore}/${maxHp} -> 陥落`);
+  }
+
+  if (target.type !== TYPE.JO && !success && defender.hasOfficer) {
+    lines.push(`${defender.name}が踏みとどまり、攻撃を押し返した`);
+    message = `攻撃失敗: ${tileLabel(target)} の守備を崩せませんでした (武力-${finalCost})`;
+    attackMode = { active: false, from: null };
+    spendAction(me.id);
+    message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+    battlePopup.phase = "result";
+    battlePopup.tacticId = tactic.id;
+    battlePopup.resultText = message;
+    battlePopup.resultLines = lines;
+    return;
   }
 
   if (target.type === TYPE.JO) {
@@ -3173,19 +3490,26 @@ function handleAttackTargetClick(c, r) {
   resetTileInfluence(target);
   capturePopulationLoss(target);
   if (target.type === TYPE.JO) target.castleHp = castleMaxHp(target);
-  selected = { c, r };
+
+  selected = { c: target.c, r: target.r };
   const officerMoment = tryOfficerMoment(me.id, "attack", from, target);
   pushTileFx(target.c, target.r, "制圧", color(220, 70, 70));
   latestComment = gainComment(me.id, target, "攻撃");
   message = target.type === TYPE.JO
-    ? `攻城成功: ${tileLabel(target)} が陥落し獲得 (武力-${need})`
-    : `攻撃成功: ${tileLabel(target)} を獲得 (武力-${need})`;
+    ? `攻城成功: ${tileLabel(target)} が陥落し獲得 (武力-${finalCost})`
+    : `攻撃成功: ${tileLabel(target)} を獲得 (武力-${finalCost})`;
   if (officerMoment) message += ` / ${officerMoment}`;
+  lines.push(`${tileLabel(target)} を制圧`);
+  if (officerMoment) lines.push(officerMoment);
   advanceMission(me.id, "capture", target);
   attackMode = { active: false, from: null };
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
+  battlePopup.phase = "result";
+  battlePopup.tacticId = tactic.id;
+  battlePopup.resultText = message;
+  battlePopup.resultLines = lines;
 }
 
 function canPlayerAct() {
@@ -3193,6 +3517,7 @@ function canPlayerAct() {
   if (gameState !== "playing") return false;
   if (eventPopup.open) return false;
   if (workshopBuildPopup.open) return false;
+  if (battlePopup.open) return false;
   if (me.id !== HUMAN_PLAYER_ID) return false;
   if (actionsLeft[HUMAN_PLAYER_ID] <= 0) {
     message = "このターンの行動を使い切りました。ターン終了してください。";
