@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260422a";
+const ASSET_REV = "20260422b";
 const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
@@ -139,6 +139,9 @@ const ART_SPRITES = {
     workshopWashi: { path: `assets/structure-workshop-washi.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
     workshopPottery: { path: `assets/structure-workshop-pottery.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
     mountain: { path: `assets/structure-mountain.png?v=${ASSET_REV}`, scale: 1.16, anchorY: 0.8 },
+    mountainRaizan: { path: `assets/structure-mountain-raizan.png?v=${ASSET_REV}`, scale: 1.28, anchorY: 0.84 },
+    mountainKeyaCave: { path: `assets/structure-mountain-keya-cave.png?v=${ASSET_REV}`, scale: 0.9, anchorY: 0.72 },
+    mountainKaya: { path: `assets/structure-mountain-kaya.png?v=${ASSET_REV}`, scale: 0.98, anchorY: 0.76 },
   },
   events: {
     C01: { path: `assets/event-C01.png?v=${ASSET_REV}` },
@@ -157,6 +160,7 @@ const ART_SPRITES = {
     H01: { path: `assets/event-E01.png?v=${ASSET_REV}` },
     H02: { path: `assets/event-C04.png?v=${ASSET_REV}` },
     recruitOfficer: { path: `assets/event-recruit-officer.png?v=${ASSET_REV}` },
+    imperialMission: { path: `assets/event-imperial-mission.png?v=${ASSET_REV}` },
   },
 };
 
@@ -311,7 +315,7 @@ function structureArtId(tile) {
   if (tile.type === TYPE.MINATO) return "structures.port";
   if (tile.type === TYPE.JINJA) return "structures.shrine";
   if (tile.type === TYPE.TERA) return "structures.temple";
-  if (tile.type === TYPE.YAMA) return "structures.mountain";
+  if (tile.type === TYPE.YAMA) return mountainStructureArtId(tile);
   if (tile.type === TYPE.KOBO) {
     const kind = workshopKind(tile);
     if (kind === WORKSHOP_KIND.FABLAB) return "structures.workshopFablab";
@@ -320,6 +324,14 @@ function structureArtId(tile) {
     return "structures.workshop";
   }
   return null;
+}
+
+function mountainStructureArtId(tile) {
+  const name = tile?.name || "";
+  if (name.includes("雷山")) return "structures.mountainRaizan";
+  if (name.includes("立石山") || name.includes("芥屋")) return "structures.mountainKeyaCave";
+  if (name.includes("可也山")) return "structures.mountainKaya";
+  return "structures.mountain";
 }
 
 function terrainArtId(tile) {
@@ -450,6 +462,7 @@ function beginGameAs(playerId) {
   selected = startBaseTile(HUMAN_PLAYER_ID);
   const me = playerById(HUMAN_PLAYER_ID);
   message = `${me.name}として開始 (${startBaseName(HUMAN_PLAYER_ID)})`;
+  openMissionPopup(HUMAN_PLAYER_ID);
 }
 
 function startPickPopupRect() {
@@ -1794,6 +1807,19 @@ function assignMission(playerId) {
   missionStateByPlayer[playerId] = { ...picked, progress: 0, completed: false };
 }
 
+function openMissionPopup(playerId) {
+  const mission = missionStateByPlayer[playerId];
+  if (!mission || mission.completed) return;
+  openInfoPopup(
+    mission.title,
+    mission.desc,
+    `褒賞: ${missionRewardText(mission.reward)} / 行動を選ぶ前に今回の勅命を確認してください。`,
+    "勅命",
+    `M-${mission.id}`,
+    "imperialMission",
+  );
+}
+
 function missionRewardText(reward) {
   const logs = [];
   if (reward.gold) logs.push(`金+${reward.gold}`);
@@ -1813,7 +1839,7 @@ function missionStatusText(playerId) {
 function completeMission(playerId, tile = null) {
   const mission = missionStateByPlayer[playerId];
   const p = playerById(playerId);
-  if (!mission || mission.completed || !p) return;
+  if (!mission || mission.completed || !p) return "";
   mission.completed = true;
   const reward = mission.reward || {};
   p.gold += reward.gold || 0;
@@ -1822,16 +1848,15 @@ function completeMission(playerId, tile = null) {
   p.force += reward.force || 0;
   if (tile) pushTileFx(tile.c, tile.r, "勅命達成", color(255, 196, 82));
   latestComment = `${p.name}が勅命達成: ${mission.title}`;
-  if (playerId === HUMAN_PLAYER_ID) {
-    openInfoPopup(`勅命達成: ${mission.title}`, mission.desc, `褒賞: ${missionRewardText(reward)}`, "達成", `M-${mission.id}`);
-  }
+  return `勅命達成: ${mission.title} / 褒賞: ${missionRewardText(reward)}`;
 }
 
 function advanceMission(playerId, kind, tile = null, amount = 1) {
   const mission = missionStateByPlayer[playerId];
-  if (!mission || mission.completed || mission.kind !== kind) return;
+  if (!mission || mission.completed || mission.kind !== kind) return "";
   mission.progress = min(mission.target, mission.progress + amount);
-  if (mission.progress >= mission.target) completeMission(playerId, tile);
+  if (mission.progress >= mission.target) return completeMission(playerId, tile);
+  return "";
 }
 
 function initializeGame() {
@@ -2194,6 +2219,7 @@ function makeFixedItoshimaMap() {
   place(7, 5, TYPE.MINATO, "千如寺前漁港");
 
   place(6, 1, TYPE.YAMA, "可也山");
+  place(7, 1, TYPE.YAMA, "立石山");
   place(10, 2, TYPE.YAMA, "高祖山");
   place(3, 6, TYPE.YAMA, "十坊山");
   place(5, 6, TYPE.YAMA, "井原山");
@@ -3023,7 +3049,8 @@ function actionCulture() {
   if (extraLogs.length > 0) pieces.push(extraLogs.join(" / "));
   if (officerMoment) pieces.push(officerMoment);
   message = pieces.join(" / ");
-  advanceMission(me.id, "culture", t);
+  const missionText = advanceMission(me.id, "culture", t);
+  if (missionText) message += ` / ${missionText}`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -3064,7 +3091,8 @@ function actionTrade() {
   const seasonGoldText = (t.type === TYPE.MINATO && seasonState.portTradeBonus > 0) ? ` / 季節金+${seasonState.portTradeBonus}` : "";
   const seasonFoodText = (isFishingPort(t) && seasonState.fishingFoodBonus > 0) ? ` / 季節食料+${seasonState.fishingFoodBonus}` : "";
   message = `交易を実行: 金 +${gain}${trade.food > 0 ? ` / 食料 +${trade.food}` : ""}（工房補正+${workshopBonus}${hasPortWorkshopCombo(me.id) ? " / 港+工房コンボ" : ""}${seasonGoldText}${seasonFoodText}）${extraInfo}${officerMoment ? ` / ${officerMoment}` : ""}`;
-  advanceMission(me.id, "trade", t);
+  const missionText = advanceMission(me.id, "trade", t);
+  if (missionText) message += ` / ${missionText}`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -3107,14 +3135,11 @@ function actionRecruitOfficer() {
   const officerMoment = tryOfficerMoment(me.id, "recruit", t);
   pushTileFx(t.c, t.r, officer.role, color(124, 116, 208));
   message = `武将を登用: ${officer.name} (${officer.role}) / 武${officer.valor} 知${officer.wit} 政${officer.admin} / 金-${RECRUIT_COST}${officerMoment ? ` / ${officerMoment}` : ""}`;
-  const missionBefore = missionStateByPlayer[me.id]?.completed || false;
-  advanceMission(me.id, "recruit", t);
-  const missionAfter = missionStateByPlayer[me.id]?.completed || false;
-  const missionText = !missionBefore && missionAfter ? ` / 勅命達成: ${missionStateByPlayer[me.id].title}` : "";
+  const missionText = advanceMission(me.id, "recruit", t);
   openInfoPopup(
     `武将登用: ${officer.name}`,
     `${tileLabel(t)}にて${officer.role}を家臣に迎えました。以後、内政・交易・戦で能力に応じた補正を発揮します。`,
-    `武${officer.valor} / 知${officer.wit} / 政${officer.admin} / 金-${RECRUIT_COST}${officerMoment ? ` / ${officerMoment}` : ""}${missionText}`,
+    `武${officer.valor} / 知${officer.wit} / 政${officer.admin} / 金-${RECRUIT_COST}${officerMoment ? ` / ${officerMoment}` : ""}${missionText ? ` / ${missionText}` : ""}`,
     "登用",
     "RECRUIT",
     "recruitOfficer",
@@ -3378,7 +3403,8 @@ function actionBuildCastle() {
   const officerMoment = tryOfficerMoment(me.id, "develop", t);
   pushTileFx(t.c, t.r, "築城", color(196, 142, 112));
   message = `築城を実行: ${tileLabel(t)} を建設 (金-${BUILD_CASTLE_COST})${officerMoment ? ` / ${officerMoment}` : ""}`;
-  advanceMission(me.id, "develop", t);
+  const missionText = advanceMission(me.id, "develop", t);
+  if (missionText) message += ` / ${missionText}`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -3429,7 +3455,8 @@ function buildWorkshopSelected(kind) {
   const officerMoment = tryOfficerMoment(me.id, "develop", t);
   pushTileFx(t.c, t.r, "工房建設", color(236, 150, 96));
   message = `工房建設を実行: ${t.name} を建設 (金-${BUILD_WORKSHOP_COST})${officerMoment ? ` / ${officerMoment}` : ""}`;
-  advanceMission(me.id, "develop", t);
+  const missionText = advanceMission(me.id, "develop", t);
+  if (missionText) message += ` / ${missionText}`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -3452,7 +3479,8 @@ function actionUpgradeBuilding() {
   const officerMoment = tryOfficerMoment(me.id, "develop", t);
   pushTileFx(t.c, t.r, `Lv${buildingLevel(t)}`, color(58, 170, 110));
   message = `改修を実行: ${tileLabel(t)} をLv${buildingLevel(t)}に増築 (金-${cost})${officerMoment ? ` / ${officerMoment}` : ""}`;
-  advanceMission(me.id, "develop", t);
+  const missionText = advanceMission(me.id, "develop", t);
+  if (missionText) message += ` / ${missionText}`;
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
   checkWinConditions();
@@ -3583,7 +3611,11 @@ function resolveBattleTactic(tactic) {
   if (officerMoment) message += ` / ${officerMoment}`;
   lines.push(`${tileLabel(target)} を制圧`);
   if (officerMoment) lines.push(officerMoment);
-  advanceMission(me.id, "capture", target);
+  const missionText = advanceMission(me.id, "capture", target);
+  if (missionText) {
+    message += ` / ${missionText}`;
+    lines.push(missionText);
+  }
   attackMode = { active: false, from: null };
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
@@ -3945,6 +3977,7 @@ function endTurn() {
         ? `敵ターン: ${aiLogs.join(" / ")} / あなたのターンです。`
         : "敵ターン終了。あなたのターンです。";
       message += seasonMsg;
+      openMissionPopup(HUMAN_PLAYER_ID);
       break;
     }
 
@@ -4146,7 +4179,8 @@ function checkCultureFlipByPlayer(playerId) {
         const fxText = playerId === HUMAN_PLAYER_ID ? "文化獲得" : "敵が獲得";
         const fxCol = playerId === HUMAN_PLAYER_ID ? color(70, 140, 255) : color(240, 90, 90);
         pushTileFx(t.c, t.r, fxText, fxCol);
-        advanceMission(playerId, "capture", t);
+        const missionText = advanceMission(playerId, "capture", t);
+        if (missionText && playerId === HUMAN_PLAYER_ID) message += ` / ${missionText}`;
       }
     }
   }
@@ -4623,7 +4657,8 @@ function tileRoleDetail(tile, playerId) {
     return `${popText} 攻撃時の武力コスト-${CASTLE_ATTACK_DISCOUNT}。被攻撃時は相手武力+${CASTLE_DEFENSE_PENALTY + buildingLevelBonus(tile) + castleDefenseBonus(tile)}必要。攻城${hpMax}回で陥落（耐久${hp}/${hpMax}）。文化転向に耐性+${CASTLE_FLIP_RESIST + buildingLevelBonus(tile) + castleFlipBonus(tile)}。${guardText}`;
   }
   if (tile.type === TYPE.YAMA) {
-    return `${popText} 攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
+    const landmark = mountainLandmarkText(tile);
+    return `${popText} ${landmark}攻撃元なら武力コスト-${MOUNTAIN_ATTACK_DISCOUNT}。山地への攻撃には追加コスト。`;
   }
   if (tile.type === TYPE.MINATO) {
     if (isFishingPort(tile)) {
@@ -4677,6 +4712,14 @@ function eventPopupRect() {
   const w = min(700, width - 80);
   const h = 440;
   return { x: (width - w) / 2, y: (height - h) / 2, w, h };
+}
+
+function mountainLandmarkText(tile) {
+  const name = tile?.name || "";
+  if (name.includes("雷山")) return "霊峰としてひときわ高く、山岳景観が強調される。";
+  if (name.includes("立石山")) return "芥屋の大戸を望む海沿いの山。海蝕洞と断崖が見える。";
+  if (name.includes("可也山")) return "糸島富士とも呼ばれる双峰の山容が目印。";
+  return "";
 }
 
 function workshopBuildPopupRect() {
