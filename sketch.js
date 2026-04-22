@@ -81,6 +81,8 @@ const SHRINE_CULTURE_PULSE = 1;
 const WORKSHOP_TRADE_BONUS = 1;
 const WORKSHOP_TRADE_BONUS_CAP = 3;
 const ACTIONS_PER_TURN = 2;
+const MISSION_OFFER_CHANCE = 0.35;
+const MISSION_CARRY_TURNS = 2;
 const RECRUIT_COST = 4;
 const SEASON_SPAN_TURNS = 3;
 let HUMAN_PLAYER_ID = 1;
@@ -1745,7 +1747,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に文化振興を1回実行せよ。",
       kind: "culture",
       target: 1,
-      reward: { culture: 3, gold: 1 },
+      reward: { culture: 5, gold: 3 },
     });
   }
   if (hasPort) {
@@ -1755,7 +1757,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に交易を1回実行せよ。",
       kind: "trade",
       target: 1,
-      reward: { gold: 4, food: 2 },
+      reward: { gold: 7, food: 4 },
     });
   }
   if (officerCount(playerId) < officerLimit(playerId)) {
@@ -1765,7 +1767,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に武将を1人登用せよ。",
       kind: "recruit",
       target: 1,
-      reward: { culture: 2, force: 2 },
+      reward: { culture: 4, force: 4, gold: 2 },
     });
   }
   if (canDevelop) {
@@ -1775,7 +1777,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に築城・工房建設・改修のいずれかを行え。",
       kind: "develop",
       target: 1,
-      reward: { gold: 2, culture: 2, force: 1 },
+      reward: { gold: 5, culture: 4, force: 2 },
     });
   }
   if (canCapture) {
@@ -1785,7 +1787,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に敵地か中立地を1マス獲得せよ。",
       kind: "capture",
       target: 1,
-      reward: { gold: 3, culture: 2, force: 2 },
+      reward: { gold: 6, culture: 4, force: 4 },
     });
   }
   if (candidates.length === 0) {
@@ -1795,7 +1797,7 @@ function buildMissionCandidates(playerId) {
       desc: "このターン中に文化振興を1回実行せよ。",
       kind: "culture",
       target: 1,
-      reward: { culture: 3 },
+      reward: { culture: 5, food: 3 },
     });
   }
   return candidates;
@@ -1804,7 +1806,23 @@ function buildMissionCandidates(playerId) {
 function assignMission(playerId) {
   const candidates = buildMissionCandidates(playerId);
   const picked = candidates[floor(random(candidates.length))];
-  missionStateByPlayer[playerId] = { ...picked, progress: 0, completed: false };
+  missionStateByPlayer[playerId] = { ...picked, progress: 0, completed: false, turnsLeft: MISSION_CARRY_TURNS };
+}
+
+function maybeOfferMission(playerId, force = false) {
+  const current = missionStateByPlayer[playerId];
+  if (current && !current.completed && (current.turnsLeft || 0) > 0) return false;
+  missionStateByPlayer[playerId] = null;
+  if (!force && random() >= MISSION_OFFER_CHANCE) return false;
+  assignMission(playerId);
+  return true;
+}
+
+function tickMissionTurns(playerId) {
+  const mission = missionStateByPlayer[playerId];
+  if (!mission || mission.completed) return;
+  mission.turnsLeft = max(0, (mission.turnsLeft || 1) - 1);
+  if (mission.turnsLeft <= 0) missionStateByPlayer[playerId] = null;
 }
 
 function openMissionPopup(playerId) {
@@ -1813,7 +1831,7 @@ function openMissionPopup(playerId) {
   openInfoPopup(
     mission.title,
     mission.desc,
-    `褒賞: ${missionRewardText(mission.reward)} / 行動を選ぶ前に今回の勅命を確認してください。`,
+    `下賜: ${missionRewardText(mission.reward)} / 行動を選ぶ前に今回の勅命を確認してください。`,
     "勅命",
     `M-${mission.id}`,
     "imperialMission",
@@ -1832,7 +1850,8 @@ function missionRewardText(reward) {
 function missionStatusText(playerId) {
   const mission = missionStateByPlayer[playerId];
   if (!mission) return "勅命なし";
-  const state = mission.completed ? "達成" : `${mission.progress}/${mission.target}`;
+  const remain = mission.completed ? "" : ` / 猶予${mission.turnsLeft || 1}T`;
+  const state = mission.completed ? "達成" : `${mission.progress}/${mission.target}${remain}`;
   return `${mission.title} (${state})`;
 }
 
@@ -1848,7 +1867,7 @@ function completeMission(playerId, tile = null) {
   p.force += reward.force || 0;
   if (tile) pushTileFx(tile.c, tile.r, "勅命達成", color(255, 196, 82));
   latestComment = `${p.name}が勅命達成: ${mission.title}`;
-  return `勅命達成: ${mission.title} / 褒賞: ${missionRewardText(reward)}`;
+  return `勅命達成: ${mission.title} / 下賜: ${missionRewardText(reward)}`;
 }
 
 function advanceMission(playerId, kind, tile = null, amount = 1) {
@@ -1899,7 +1918,7 @@ function initializeGame() {
   attackMode = { active: false, from: null };
 
   initEventDeck();
-  for (const pid of playerIds()) assignMission(pid);
+  for (const pid of playerIds()) maybeOfferMission(pid, pid === HUMAN_PLAYER_ID);
   updateSoundtrackTheme(true);
   buildButtons();
 }
@@ -2306,7 +2325,7 @@ function drawHexGrid() {
       textSize(24);
       if (t.type !== TYPE.HEICHI) {
         drawIsoStructure(t, isoCtr.x, tileGroundY, HEX_SIZE * 0.62);
-        if (t.type !== TYPE.UMI) {
+        if (t.type !== TYPE.UMI && t.type !== TYPE.YAMA) {
           textSize(TILE_NAME_FONT);
           fill(12, 20, 28, 215);
           rect(isoCtr.x - TILE_NAME_W / 2, isoCtr.y + isoTileMetrics(1).depth * 0.5, TILE_NAME_W, TILE_NAME_H, 8);
@@ -2547,7 +2566,7 @@ function drawBottomBar() {
 
   const mission = missionStateByPlayer[HUMAN_PLAYER_ID];
   const missionLine = mission
-    ? `${mission.title} - ${mission.desc} / 褒賞: ${missionRewardText(mission.reward)} / 状態:${mission.completed ? "達成" : `${mission.progress}/${mission.target}`}`
+    ? `${mission.title} - ${mission.desc} / 下賜: ${missionRewardText(mission.reward)} / 状態:${mission.completed ? "達成" : `${mission.progress}/${mission.target}`}`
     : "勅命: なし";
   text(missionLine, 24, y0 + 108, width - 48, 22);
 
@@ -3961,7 +3980,6 @@ function endTurn() {
     eventReadyThisTurn[pid] = rollEventReady();
     flipCapturesThisTurn[pid] = 0;
     eventUsedByPlayer[pid] = false;
-    assignMission(pid);
 
     if (pid === HUMAN_PLAYER_ID) {
       turn += 1;
@@ -3971,16 +3989,20 @@ function endTurn() {
       tradeUsedThisTurn = false;
       applyInfluenceDecay();
       tickBuffTurns();
+      tickMissionTurns(pid);
+      const missionOffered = maybeOfferMission(pid);
       checkWinConditions();
       const seasonMsg = prevSeasonId !== seasonState.id ? ` / 季節変化: ${seasonState.name}(${seasonState.desc})` : "";
       message = aiLogs.length > 0
         ? `敵ターン: ${aiLogs.join(" / ")} / あなたのターンです。`
         : "敵ターン終了。あなたのターンです。";
       message += seasonMsg;
-      openMissionPopup(HUMAN_PLAYER_ID);
+      if (missionOffered) openMissionPopup(HUMAN_PLAYER_ID);
       break;
     }
 
+    tickMissionTurns(pid);
+    maybeOfferMission(pid);
     const aiSummary = aiTurn(currentPlayer);
     passive(currentPlayer);
     spreadCulture(pid);
