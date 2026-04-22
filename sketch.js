@@ -156,6 +156,7 @@ const ART_SPRITES = {
     W03: { path: `assets/event-W03.png?v=${ASSET_REV}` },
     H01: { path: `assets/event-E01.png?v=${ASSET_REV}` },
     H02: { path: `assets/event-C04.png?v=${ASSET_REV}` },
+    recruitOfficer: { path: `assets/event-recruit-officer.png?v=${ASSET_REV}` },
   },
 };
 
@@ -3106,7 +3107,18 @@ function actionRecruitOfficer() {
   const officerMoment = tryOfficerMoment(me.id, "recruit", t);
   pushTileFx(t.c, t.r, officer.role, color(124, 116, 208));
   message = `武将を登用: ${officer.name} (${officer.role}) / 武${officer.valor} 知${officer.wit} 政${officer.admin} / 金-${RECRUIT_COST}${officerMoment ? ` / ${officerMoment}` : ""}`;
+  const missionBefore = missionStateByPlayer[me.id]?.completed || false;
   advanceMission(me.id, "recruit", t);
+  const missionAfter = missionStateByPlayer[me.id]?.completed || false;
+  const missionText = !missionBefore && missionAfter ? ` / 勅命達成: ${missionStateByPlayer[me.id].title}` : "";
+  openInfoPopup(
+    `武将登用: ${officer.name}`,
+    `${tileLabel(t)}にて${officer.role}を家臣に迎えました。以後、内政・交易・戦で能力に応じた補正を発揮します。`,
+    `武${officer.valor} / 知${officer.wit} / 政${officer.admin} / 金-${RECRUIT_COST}${officerMoment ? ` / ${officerMoment}` : ""}${missionText}`,
+    "登用",
+    "RECRUIT",
+    "recruitOfficer",
+  );
   spendAction(me.id);
   message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
 }
