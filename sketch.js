@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260422c";
+const ASSET_REV = "20260422d";
 const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
@@ -141,9 +141,9 @@ const ART_SPRITES = {
     workshopWashi: { path: `assets/structure-workshop-washi.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
     workshopPottery: { path: `assets/structure-workshop-pottery.png?v=${ASSET_REV}`, scale: 1.18, anchorY: 0.76 },
     mountain: { path: `assets/structure-mountain.png?v=${ASSET_REV}`, scale: 1.16, anchorY: 0.8 },
-    mountainRaizan: { path: `assets/structure-mountain-raizan.png?v=${ASSET_REV}`, scale: 2.2, anchorY: 0.86 },
-    mountainKeyaCave: { path: `assets/structure-mountain-keya-cave.png?v=${ASSET_REV}`, scale: 1.42, anchorY: 0.74 },
-    mountainKaya: { path: `assets/structure-mountain-kaya.png?v=${ASSET_REV}`, scale: 1.58, anchorY: 0.78 },
+    mountainRaizan: { path: `assets/structure-mountain-raizan.png?v=${ASSET_REV}`, scale: 1.78, anchorY: 0.84 },
+    mountainKeyaCave: { path: `assets/structure-mountain-keya-cave.png?v=${ASSET_REV}`, scale: 1.16, anchorY: 0.72 },
+    mountainKaya: { path: `assets/structure-mountain-kaya.png?v=${ASSET_REV}`, scale: 1.28, anchorY: 0.76 },
   },
   events: {
     C01: { path: `assets/event-C01.png?v=${ASSET_REV}` },
@@ -338,7 +338,6 @@ function mountainStructureArtId(tile) {
 
 function terrainArtId(tile) {
   if (tile.type === TYPE.UMI) return "terrain.sea";
-  if (tile.type === TYPE.YAMA) return "terrain.mountain";
   return "terrain.plains";
 }
 
@@ -2350,7 +2349,6 @@ function drawHexGrid() {
     }
   }
 
-  drawCoastlineRim();
   drawTileFx();
   pop();
 }
