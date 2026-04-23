@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260422d";
+const ASSET_REV = "20260423a";
 const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
@@ -163,6 +163,7 @@ const ART_SPRITES = {
     H02: { path: `assets/event-C04.png?v=${ASSET_REV}` },
     recruitOfficer: { path: `assets/event-recruit-officer.png?v=${ASSET_REV}` },
     imperialMission: { path: `assets/event-imperial-mission.png?v=${ASSET_REV}` },
+    castleFall: { path: `assets/event-castle-fall.png?v=${ASSET_REV}` },
   },
 };
 
@@ -3157,6 +3158,14 @@ function finishSiegeBattle(captured, withdrew) {
   battlePopup.tacticId = siegeScene.tactic.id;
   battlePopup.resultText = message;
   battlePopup.resultLines = lines;
+  openInfoPopup(
+    `${tileLabel(target)} 陥落`,
+    `${tileLabel(target)}の城門を破り、軍勢が城内へなだれ込みました。旗印が替わり、この城は新たな支配下に入ります。`,
+    `攻城成功 / 武力-${paidCost}${officerMoment ? ` / ${officerMoment}` : ""}${missionText ? ` / ${missionText}` : ""}`,
+    "陥落",
+    "CASTLE-FALL",
+    "castleFall",
+  );
   siegeScene.resolved = true;
   siegeScene.phase = "result";
   siegeScene.resultText = message;
@@ -4179,6 +4188,16 @@ function resolveBattleTactic(tactic, fromSiegeScene = false) {
   battlePopup.tacticId = tactic.id;
   battlePopup.resultText = message;
   battlePopup.resultLines = lines;
+  if (target.type === TYPE.JO) {
+    openInfoPopup(
+      `${tileLabel(target)} 陥落`,
+      `${tileLabel(target)}の城門を破り、軍勢が城内へなだれ込みました。旗印が替わり、この城は新たな支配下に入ります。`,
+      `攻城成功 / 武力-${finalCost}${officerMoment ? ` / ${officerMoment}` : ""}${missionText ? ` / ${missionText}` : ""}`,
+      "陥落",
+      "CASTLE-FALL",
+      "castleFall",
+    );
+  }
 }
 
 function canPlayerAct() {

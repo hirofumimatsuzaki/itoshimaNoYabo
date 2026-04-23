@@ -17,6 +17,7 @@
 - `structure-workshop-fablab.png`
 - `structure-workshop-washi.png`
 - `structure-workshop-pottery.png`
+- `event-castle-fall.png`
 
 ## 想定ファイル
 
