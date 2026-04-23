@@ -228,6 +228,16 @@ let siegeScene = {
   from: null,
   target: null,
   startedAt: 0,
+  phase: "command",
+  round: 1,
+  maxRounds: 3,
+  hp: 0,
+  hpMax: 0,
+  baseCost: 0,
+  extraCost: 0,
+  logs: [],
+  lastCommand: null,
+  lastOutcome: null,
   resolved: false,
   resultText: "",
   resultLines: [],
@@ -1914,6 +1924,14 @@ function initializeGame() {
   siegeScene.tactic = null;
   siegeScene.from = null;
   siegeScene.target = null;
+  siegeScene.phase = "command";
+  siegeScene.round = 1;
+  siegeScene.hp = 0;
+  siegeScene.hpMax = 0;
+  siegeScene.extraCost = 0;
+  siegeScene.logs = [];
+  siegeScene.lastCommand = null;
+  siegeScene.lastOutcome = null;
   siegeScene.resolved = false;
   tileFx = [];
   mountainPassTurns = makePlayerStateMap(0);
@@ -2934,6 +2952,7 @@ function openSiegeScene(tactic) {
   const target = battlePopup.target ? getTile(battlePopup.target.c, battlePopup.target.r) : null;
   if (!from || !target) return;
   const maxHp = castleMaxHp(target);
+  const hpBefore = target.castleHp > 0 ? target.castleHp : maxHp;
   siegeScene = {
     open: true,
     tactic,
@@ -2943,17 +2962,27 @@ function openSiegeScene(tactic) {
       r: target.r,
       name: tileLabel(target),
       owner: target.owner,
-      hpBefore: target.castleHp > 0 ? target.castleHp : maxHp,
+      hpBefore,
       hpMax: maxHp,
       level: buildingLevel(target),
     },
     startedAt: frameCount,
+    phase: "command",
+    round: 1,
+    maxRounds: 3,
+    hp: hpBefore,
+    hpMax: maxHp,
+    baseCost: tacticCost(battlePopup.need, tactic),
+    extraCost: 0,
+    logs: [`${tactic.name}: ${battleAttackerOfficer() ? `${battleAttackerOfficer().name}が攻城を指揮` : "足軽隊が攻城を開始"}`],
+    lastCommand: null,
+    lastOutcome: null,
     resolved: false,
     resultText: "",
     resultLines: [],
   };
   battlePopup.phase = "scene";
-  message = `${tileLabel(target)}へ進軍中: ${tactic.name}`;
+  message = `${tileLabel(target)}攻城戦: 指示を選んでください。`;
 }
 
 function siegeSceneBackRect() {
@@ -2975,15 +3004,163 @@ function handleSiegeSceneClick(mx, my) {
     }
     return;
   }
-  siegeScene.startedAt = min(siegeScene.startedAt, frameCount - 132);
+  if (siegeScene.phase === "anim") {
+    siegeScene.startedAt = min(siegeScene.startedAt, frameCount - 34);
+    return;
+  }
+  if (siegeScene.phase !== "command") return;
+  for (const box of siegeCommandRects()) {
+    if (rectContains(box, mx, my)) {
+      resolveSiegeCommand(box.command);
+      return;
+    }
+  }
+}
+
+function siegeCommandRects() {
+  const r = siegeSceneRect();
+  const gap = 10;
+  const y = r.y + r.h - 76;
+  const w = (r.w - 48 - gap * 3) / 4;
+  return SIEGE_COMMANDS.map((command, i) => ({
+    command,
+    x: r.x + 24 + i * (w + gap),
+    y,
+    w,
+    h: 52,
+  }));
+}
+
+function siegeCommandEnabled(command) {
+  if (command.withdraw) return true;
+  const me = playerById(HUMAN_PLAYER_ID);
+  if (!me) return false;
+  return me.force >= siegeScene.baseCost + siegeScene.extraCost + command.cost;
+}
+
+function resolveSiegeCommand(command) {
+  if (!siegeScene.open || siegeScene.phase !== "command" || siegeScene.resolved) return;
+  if (!siegeCommandEnabled(command)) {
+    message = `${command.name}には武力が足りません。`;
+    return;
+  }
+  if (command.withdraw) {
+    finishSiegeBattle(false, true);
+    return;
+  }
+
+  const target = siegeScene.target ? getTile(siegeScene.target.c, siegeScene.target.r) : null;
+  if (!target) return;
+  const attackerOfficer = battleAttackerOfficer();
+  const defender = tileDefenseProfile(target);
+  const attackStat = attackerOfficer ? (attackerOfficer[command.stat] || 0) : 3;
+  const defenseStat = defender[command.stat] || 1;
+  const roll = floor(random(1, 7));
+  const score = attackStat + roll + (command.scoreBonus || 0);
+  const defenseScore = defenseStat + (defender.hasOfficer ? 3 : 1) + buildingLevelBonus(target);
+  const success = score >= defenseScore;
+  let damage = command.baseDamage + (success ? 1 : 0);
+  if (command.id === "surprise" && success && score >= defenseScore + 2) damage += command.critDamage || 0;
+  if (command.id === "gate" && !success) damage = max(0, damage - 1);
+  if (siegeScene.tactic && siegeScene.tactic.id === "assault" && command.id === "gate") damage += 1;
+  if (siegeScene.tactic && siegeScene.tactic.id === "siege" && command.id === "encircle") damage += 1;
+  if (siegeScene.tactic && siegeScene.tactic.id === "raid" && command.id === "surprise") damage += 1;
+  damage = max(0, damage);
+
+  siegeScene.extraCost += command.cost + (!success && command.risk ? command.risk : 0);
+  const hpBefore = siegeScene.hp;
+  siegeScene.hp = max(0, siegeScene.hp - damage);
+  siegeScene.lastCommand = command;
+  siegeScene.lastOutcome = { success, score, defenseScore, damage, hpBefore, hpAfter: siegeScene.hp };
+  siegeScene.logs.push(`${siegeScene.round}R ${command.name}: 攻${score} vs 守${defenseScore} / ${success ? "成功" : "苦戦"} / 耐久 ${hpBefore}->${siegeScene.hp}`);
+  siegeScene.phase = "anim";
+  siegeScene.startedAt = frameCount;
+  playBattleSfx(max(1, command.cost + damage));
+  triggerCameraShake(min(14, 5 + damage * 2), 12);
+  message = `${command.name}: 城耐久 ${siegeScene.hp}/${siegeScene.hpMax}`;
 }
 
 function updateSiegeSceneResolution(elapsed) {
-  if (!siegeScene.open || siegeScene.resolved || elapsed < 138) return;
-  resolveBattleTactic(siegeScene.tactic, true);
+  if (!siegeScene.open || siegeScene.resolved || siegeScene.phase !== "anim" || elapsed < 38) return;
+  if (siegeScene.hp <= 0) {
+    finishSiegeBattle(true, false);
+    return;
+  }
+  if (siegeScene.round >= siegeScene.maxRounds) {
+    finishSiegeBattle(false, false);
+    return;
+  }
+  siegeScene.round += 1;
+  siegeScene.phase = "command";
+  message = `攻城戦 ${siegeScene.round}/${siegeScene.maxRounds}: 次の指示を選んでください。`;
+}
+
+function finishSiegeBattle(captured, withdrew) {
+  if (!siegeScene.open || siegeScene.resolved) return;
+  const me = players[currentPlayer];
+  const from = getTile(battlePopup.from.c, battlePopup.from.r);
+  const target = getTile(battlePopup.target.c, battlePopup.target.r);
+  if (!me || !from || !target) return;
+  const totalCost = max(1, siegeScene.baseCost + siegeScene.extraCost);
+  const paidCost = min(me.force, totalCost);
+  me.force -= paidCost;
+  const maxHp = castleMaxHp(target);
+  const hpBefore = siegeScene.target.hpBefore;
+  const lines = [...siegeScene.logs];
+
+  attackMode = { active: false, from: null };
+  spendAction(me.id);
+
+  if (!captured) {
+    target.castleHp = max(1, siegeScene.hp);
+    pushTileFx(target.c, target.r, withdrew ? "撤退" : `攻城 ${target.castleHp}/${maxHp}`, color(220, 90, 70));
+    const reason = withdrew ? "撤退" : "攻め切れず";
+    lines.push(`城耐久: ${hpBefore}/${maxHp} -> ${target.castleHp}/${maxHp}`);
+    message = `攻城${reason}: ${tileLabel(target)} の耐久 ${target.castleHp}/${maxHp} (武力-${paidCost})`;
+    message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+    battlePopup.phase = "result";
+    battlePopup.tacticId = siegeScene.tactic.id;
+    battlePopup.resultText = message;
+    battlePopup.resultLines = lines;
+    siegeScene.resolved = true;
+    siegeScene.phase = "result";
+    siegeScene.resultText = message;
+    siegeScene.resultLines = lines;
+    return;
+  }
+
+  const prevOfficer = garrisonOfficer(target);
+  if (prevOfficer) prevOfficer.assignedCastleKey = null;
+  target.garrisonOfficerId = null;
+  target.owner = me.id;
+  resetTileInfluence(target);
+  capturePopulationLoss(target);
+  target.castleHp = castleMaxHp(target);
+
+  selected = { c: target.c, r: target.r };
+  const officerMoment = tryOfficerMoment(me.id, "attack", from, target);
+  pushTileFx(target.c, target.r, "制圧", color(220, 70, 70));
+  latestComment = gainComment(me.id, target, "攻撃");
+  message = `攻城成功: ${tileLabel(target)} が陥落し獲得 (武力-${paidCost})`;
+  if (officerMoment) message += ` / ${officerMoment}`;
+  lines.push(`城耐久: ${hpBefore}/${maxHp} -> 陥落`);
+  lines.push(`${tileLabel(target)} を制圧`);
+  if (officerMoment) lines.push(officerMoment);
+  const missionText = advanceMission(me.id, "capture", target);
+  if (missionText) {
+    message += ` / ${missionText}`;
+    lines.push(missionText);
+  }
+  message += ` / 行動:${actionsLeft[me.id]}/${ACTIONS_PER_TURN}`;
+  checkWinConditions();
+  battlePopup.phase = "result";
+  battlePopup.tacticId = siegeScene.tactic.id;
+  battlePopup.resultText = message;
+  battlePopup.resultLines = lines;
   siegeScene.resolved = true;
-  siegeScene.resultText = battlePopup.resultText;
-  siegeScene.resultLines = [...battlePopup.resultLines];
+  siegeScene.phase = "result";
+  siegeScene.resultText = message;
+  siegeScene.resultLines = lines;
 }
 
 function drawSiegeScene() {
@@ -3002,8 +3179,8 @@ function drawSiegeScene() {
   const tactic = siegeScene.tactic || BATTLE_TACTICS[0];
   const attackerOfficer = battleAttackerOfficer();
   const defender = tileDefenseProfile(targetTile);
-  const troopProgress = constrain(elapsed / 104, 0, 1);
-  const impactPulse = elapsed > 100 && elapsed < 136 ? sin((elapsed - 100) * 0.62) : 0;
+  const troopProgress = siegeScene.phase === "anim" ? constrain(elapsed / 38, 0, 1) : 0.18 + (siegeScene.round - 1) * 0.18;
+  const impactPulse = siegeScene.phase === "anim" ? max(0, sin(elapsed * 0.42)) : 0;
 
   fill(0, 168);
   rect(0, 0, width, height);
@@ -3013,7 +3190,7 @@ function drawSiegeScene() {
   const fieldX = r.x + 24;
   const fieldY = r.y + 74;
   const fieldW = r.w - 48;
-  const fieldH = r.h - 178;
+  const fieldH = r.h - 238;
   fillLinearGradientRect(fieldX, fieldY, fieldW, fieldH, color(202, 216, 198), color(146, 170, 148), false, 8);
   drawWovenPattern(fieldX, fieldY, fieldW, fieldH, 12);
 
@@ -3024,7 +3201,7 @@ function drawSiegeScene() {
   text("攻城戦", r.x + 28, r.y + 22);
   textSize(13);
   fill(72, 78, 88);
-  text(`${siegeScene.from.name} から ${siegeScene.target.name} へ進軍 / 戦術: ${tactic.name}`, r.x + 30, r.y + 54);
+  text(`${siegeScene.from.name} から ${siegeScene.target.name} へ進軍 / 戦術: ${tactic.name} / ${siegeScene.round}/${siegeScene.maxRounds}R`, r.x + 30, r.y + 54);
 
   drawSiegeHills(fieldX, fieldY, fieldW, fieldH);
   drawSiegeCastle(targetTile, fieldX + fieldW * 0.74, fieldY + fieldH * 0.62, min(62, fieldH * 0.18), defenderTheme, impactPulse);
@@ -3033,17 +3210,19 @@ function drawSiegeScene() {
   drawSiegeBanner(fieldX + 22, fieldY + 24, attackerTheme, attacker ? attacker.name : "攻撃側");
   drawSiegeBanner(fieldX + fieldW - 150, fieldY + 24, defenderTheme, defenderPlayer ? defenderPlayer.name : "防御側");
 
-  const hpMax = siegeScene.target.hpMax || castleMaxHp(targetTile);
-  const hpNow = siegeScene.resolved ? (targetTile.owner === HUMAN_PLAYER_ID ? 0 : targetTile.castleHp) : siegeScene.target.hpBefore;
+  const hpMax = siegeScene.hpMax || siegeScene.target.hpMax || castleMaxHp(targetTile);
+  const hpNow = siegeScene.resolved && targetTile.owner === HUMAN_PLAYER_ID ? 0 : siegeScene.hp;
   drawSiegeStatusPanel(r, attacker, attackerOfficer, defender, hpNow, hpMax, tactic);
 
   if (siegeScene.resolved) {
     drawSiegeResultPanel(r);
+  } else if (siegeScene.phase === "command") {
+    drawSiegeCommandCards();
   } else {
     fill(24, 36, 50);
     textAlign(CENTER, CENTER);
     textSize(13);
-    text(elapsed < 104 ? "クリックで早送り" : "戦況を判定中...", r.x + r.w / 2, r.y + r.h - 34);
+    text("攻撃中... クリックで早送り", r.x + r.w / 2, r.y + r.h - 34);
   }
 }
 
@@ -3109,7 +3288,7 @@ function drawSiegeSoldier(x, y, size, theme, dir) {
 }
 
 function drawSiegeProjectiles(x, y, w, h, elapsed, progress) {
-  const active = elapsed > 46 && elapsed < 132;
+  const active = siegeScene.phase === "anim" && elapsed < 38;
   if (!active) return;
   stroke(66, 54, 42, 190);
   strokeWeight(2);
@@ -3139,8 +3318,35 @@ function drawSiegeBanner(x, y, theme, label) {
   text(label, x + 32, y + 15);
 }
 
+function drawSiegeCommandCards() {
+  const me = playerById(HUMAN_PLAYER_ID);
+  const r = siegeSceneRect();
+  fill(24, 36, 50);
+  textAlign(LEFT, CENTER);
+  textSize(12);
+  text(`指示を選択 / 消費予定 武力-${siegeScene.baseCost + siegeScene.extraCost}${me ? ` / 残武力${me.force}` : ""}`, r.x + 28, r.y + r.h - 92);
+  for (const box of siegeCommandRects()) {
+    const command = box.command;
+    const enabled = siegeCommandEnabled(command);
+    fill(enabled ? color(255, 252, 246, 242) : color(222, 222, 222, 220));
+    stroke(enabled ? color(48, 56, 66, 170) : color(132, 132, 132, 150));
+    strokeWeight(1.2);
+    rect(box.x, box.y, box.w, box.h, 8);
+    noStroke();
+    fill(enabled ? color(24, 36, 50) : color(96));
+    textAlign(LEFT, TOP);
+    textSize(13);
+    text(command.name, box.x + 12, box.y + 8);
+    textSize(10.5);
+    const costText = command.withdraw ? "戦闘終了" : `追加武力-${command.cost}`;
+    text(costText, box.x + box.w - 70, box.y + 10, 58, 12);
+    fill(enabled ? color(58, 64, 72) : color(110));
+    text(command.desc, box.x + 12, box.y + 26, box.w - 24, 22);
+  }
+}
+
 function drawSiegeStatusPanel(r, attacker, attackerOfficer, defender, hpNow, hpMax, tactic) {
-  const y = r.y + r.h - 92;
+  const y = r.y + r.h - 152;
   fill(255, 252, 246, 235);
   stroke(68, 82, 96, 70);
   strokeWeight(1.1);
@@ -3556,6 +3762,45 @@ const BATTLE_TACTICS = [
     costMod: 0,
     baseDamage: 1,
     targetTypes: null,
+  },
+];
+
+const SIEGE_COMMANDS = [
+  {
+    id: "gate",
+    name: "門攻め",
+    desc: "城門へ押し込む。削りは大きいが反撃を受けやすい。",
+    stat: "valor",
+    cost: 2,
+    baseDamage: 2,
+    risk: 1,
+  },
+  {
+    id: "encircle",
+    name: "包囲",
+    desc: "退路を断って堅実に削る。失敗しにくい。",
+    stat: "admin",
+    cost: 1,
+    baseDamage: 1,
+    scoreBonus: 1,
+  },
+  {
+    id: "surprise",
+    name: "奇襲",
+    desc: "隙を突く。知略で勝てば大きく崩せる。",
+    stat: "wit",
+    cost: 1,
+    baseDamage: 1,
+    critDamage: 2,
+  },
+  {
+    id: "withdraw",
+    name: "撤退",
+    desc: "ここで兵を引く。城耐久の削りだけを残す。",
+    stat: "admin",
+    cost: 0,
+    baseDamage: 0,
+    withdraw: true,
   },
 ];
 
