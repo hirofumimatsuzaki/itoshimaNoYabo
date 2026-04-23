@@ -222,6 +222,16 @@ let battlePopup = {
   resultText: "",
   resultLines: [],
 };
+let siegeScene = {
+  open: false,
+  tactic: null,
+  from: null,
+  target: null,
+  startedAt: 0,
+  resolved: false,
+  resultText: "",
+  resultLines: [],
+};
 let tileFx = [];
 
 let buttons = [];
@@ -1900,6 +1910,11 @@ function initializeGame() {
   workshopBuildPopup.open = false;
   workshopBuildPopup.c = -1;
   workshopBuildPopup.r = -1;
+  siegeScene.open = false;
+  siegeScene.tactic = null;
+  siegeScene.from = null;
+  siegeScene.target = null;
+  siegeScene.resolved = false;
   tileFx = [];
   mountainPassTurns = makePlayerStateMap(0);
   flipCapturesThisTurn = makePlayerStateMap(0);
@@ -1933,7 +1948,8 @@ function draw() {
   if (eventPopup.open) drawEventPopup();
   if (workshopBuildPopup.open) drawWorkshopBuildPopup();
   if (gameState !== "playing") drawWinPopup();
-  if (battlePopup.open) drawBattlePopup();
+  if (battlePopup.open && !siegeScene.open) drawBattlePopup();
+  if (siegeScene.open) drawSiegeScene();
   if (startPickPopup.open) drawStartPickPopup();
   updateSoundtrack();
 }
@@ -1960,6 +1976,11 @@ function mousePressed() {
     if (picked) {
       buildWorkshopSelected(picked.kind);
     }
+    return;
+  }
+
+  if (siegeScene.open) {
+    handleSiegeSceneClick(mouseX, mouseY);
     return;
   }
 
@@ -2609,7 +2630,7 @@ function drawEventPopup() {
   const theme = currentTheme();
 
   const w = min(700, width - 80);
-  const h = 440;
+  const h = min(560, height - 70);
   const x = (width - w) / 2;
   const y = (height - h) / 2;
 
@@ -2634,7 +2655,7 @@ function drawEventPopup() {
   const artX = x + 24;
   const artY = y + 78;
   const artW = w - 48;
-  const artH = 178;
+  const artH = min(300, h - 250);
   if (art && art.ready && art.img) {
     drawEventArtImage(art.img, artX, artY, artW, artH);
   } else {
@@ -2649,11 +2670,12 @@ function drawEventPopup() {
   fill(40);
   textAlign(LEFT, TOP);
   textSize(15);
-  text(eventPopup.desc, x + 24, y + 270, w - 48, 52);
+  const descY = artY + artH + 18;
+  text(eventPopup.desc, x + 24, descY, w - 48, 50);
 
   fill(30);
   textSize(14);
-  text(eventPopup.effectText, x + 24, y + 328, w - 48, 54);
+  text(eventPopup.effectText, x + 24, descY + 62, w - 48, 56);
 
   fill(242, 228, 196);
   rect(x + w - 130, y + 18, 100, 28, 14);
@@ -2681,13 +2703,26 @@ function drawEventArtImage(img, x, y, w, h) {
   drawingContext.save();
   roundedRectPath(drawingContext, x, y, w, h, 18);
   drawingContext.clip();
-  drawImageCover(img, x, y, w, h);
+  drawImageContain(img, x, y, w, h);
   drawingContext.restore();
   noFill();
   stroke(255, 255, 255, 100);
   strokeWeight(1.4);
   rect(x, y, w, h, 18);
   pop();
+}
+
+function drawImageContain(img, x, y, w, h) {
+  const srcRatio = img.width / max(1, img.height);
+  const dstRatio = w / max(1, h);
+  let dw = w;
+  let dh = h;
+  if (srcRatio > dstRatio) {
+    dh = w / srcRatio;
+  } else {
+    dw = h * srcRatio;
+  }
+  image(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
 function roundedRectPath(ctx, x, y, w, h, r) {
@@ -2892,6 +2927,259 @@ function handleBattlePopupClick(mx, my) {
       return;
     }
   }
+}
+
+function openSiegeScene(tactic) {
+  const from = battlePopup.from ? getTile(battlePopup.from.c, battlePopup.from.r) : null;
+  const target = battlePopup.target ? getTile(battlePopup.target.c, battlePopup.target.r) : null;
+  if (!from || !target) return;
+  const maxHp = castleMaxHp(target);
+  siegeScene = {
+    open: true,
+    tactic,
+    from: { c: from.c, r: from.r, name: tileLabel(from), owner: from.owner },
+    target: {
+      c: target.c,
+      r: target.r,
+      name: tileLabel(target),
+      owner: target.owner,
+      hpBefore: target.castleHp > 0 ? target.castleHp : maxHp,
+      hpMax: maxHp,
+      level: buildingLevel(target),
+    },
+    startedAt: frameCount,
+    resolved: false,
+    resultText: "",
+    resultLines: [],
+  };
+  battlePopup.phase = "scene";
+  message = `${tileLabel(target)}へ進軍中: ${tactic.name}`;
+}
+
+function siegeSceneBackRect() {
+  const r = siegeSceneRect();
+  return { x: r.x + r.w - 152, y: r.y + r.h - 52, w: 124, h: 34 };
+}
+
+function siegeSceneRect() {
+  const w = min(900, width - 64);
+  const h = min(560, height - 64);
+  return { x: (width - w) / 2, y: (height - h) / 2, w, h };
+}
+
+function handleSiegeSceneClick(mx, my) {
+  if (siegeScene.resolved) {
+    if (rectContains(siegeSceneBackRect(), mx, my)) {
+      siegeScene.open = false;
+      battlePopup.open = false;
+    }
+    return;
+  }
+  siegeScene.startedAt = min(siegeScene.startedAt, frameCount - 132);
+}
+
+function updateSiegeSceneResolution(elapsed) {
+  if (!siegeScene.open || siegeScene.resolved || elapsed < 138) return;
+  resolveBattleTactic(siegeScene.tactic, true);
+  siegeScene.resolved = true;
+  siegeScene.resultText = battlePopup.resultText;
+  siegeScene.resultLines = [...battlePopup.resultLines];
+}
+
+function drawSiegeScene() {
+  const elapsed = frameCount - siegeScene.startedAt;
+  updateSiegeSceneResolution(elapsed);
+
+  const r = siegeSceneRect();
+  const fromTile = siegeScene.from ? getTile(siegeScene.from.c, siegeScene.from.r) : null;
+  const targetTile = siegeScene.target ? getTile(siegeScene.target.c, siegeScene.target.r) : null;
+  if (!fromTile || !targetTile) return;
+
+  const attacker = playerById(HUMAN_PLAYER_ID);
+  const defenderPlayer = playerById(siegeScene.target.owner);
+  const attackerTheme = clanTheme(HUMAN_PLAYER_ID);
+  const defenderTheme = clanTheme(siegeScene.target.owner || targetTile.owner || HUMAN_PLAYER_ID);
+  const tactic = siegeScene.tactic || BATTLE_TACTICS[0];
+  const attackerOfficer = battleAttackerOfficer();
+  const defender = tileDefenseProfile(targetTile);
+  const troopProgress = constrain(elapsed / 104, 0, 1);
+  const impactPulse = elapsed > 100 && elapsed < 136 ? sin((elapsed - 100) * 0.62) : 0;
+
+  fill(0, 168);
+  rect(0, 0, width, height);
+  drawPanelCard(r.x, r.y, r.w, r.h, 16);
+  drawThemeFrame(r.x, r.y, r.w, r.h, attackerTheme, 16);
+
+  const fieldX = r.x + 24;
+  const fieldY = r.y + 74;
+  const fieldW = r.w - 48;
+  const fieldH = r.h - 178;
+  fillLinearGradientRect(fieldX, fieldY, fieldW, fieldH, color(202, 216, 198), color(146, 170, 148), false, 8);
+  drawWovenPattern(fieldX, fieldY, fieldW, fieldH, 12);
+
+  noStroke();
+  fill(24, 36, 50);
+  textAlign(LEFT, TOP);
+  textSize(24);
+  text("攻城戦", r.x + 28, r.y + 22);
+  textSize(13);
+  fill(72, 78, 88);
+  text(`${siegeScene.from.name} から ${siegeScene.target.name} へ進軍 / 戦術: ${tactic.name}`, r.x + 30, r.y + 54);
+
+  drawSiegeHills(fieldX, fieldY, fieldW, fieldH);
+  drawSiegeCastle(targetTile, fieldX + fieldW * 0.74, fieldY + fieldH * 0.62, min(62, fieldH * 0.18), defenderTheme, impactPulse);
+  drawSiegeUnits(fieldX, fieldY, fieldW, fieldH, attackerTheme, defenderTheme, troopProgress, impactPulse);
+  drawSiegeProjectiles(fieldX, fieldY, fieldW, fieldH, elapsed, troopProgress);
+  drawSiegeBanner(fieldX + 22, fieldY + 24, attackerTheme, attacker ? attacker.name : "攻撃側");
+  drawSiegeBanner(fieldX + fieldW - 150, fieldY + 24, defenderTheme, defenderPlayer ? defenderPlayer.name : "防御側");
+
+  const hpMax = siegeScene.target.hpMax || castleMaxHp(targetTile);
+  const hpNow = siegeScene.resolved ? (targetTile.owner === HUMAN_PLAYER_ID ? 0 : targetTile.castleHp) : siegeScene.target.hpBefore;
+  drawSiegeStatusPanel(r, attacker, attackerOfficer, defender, hpNow, hpMax, tactic);
+
+  if (siegeScene.resolved) {
+    drawSiegeResultPanel(r);
+  } else {
+    fill(24, 36, 50);
+    textAlign(CENTER, CENTER);
+    textSize(13);
+    text(elapsed < 104 ? "クリックで早送り" : "戦況を判定中...", r.x + r.w / 2, r.y + r.h - 34);
+  }
+}
+
+function drawSiegeHills(x, y, w, h) {
+  noStroke();
+  fill(94, 126, 104, 100);
+  beginShape();
+  vertex(x, y + h * 0.68);
+  bezierVertex(x + w * 0.18, y + h * 0.5, x + w * 0.34, y + h * 0.62, x + w * 0.5, y + h * 0.48);
+  bezierVertex(x + w * 0.66, y + h * 0.34, x + w * 0.84, y + h * 0.48, x + w, y + h * 0.38);
+  vertex(x + w, y + h);
+  vertex(x, y + h);
+  endShape(CLOSE);
+  fill(92, 88, 74, 48);
+  rect(x + w * 0.1, y + h * 0.72, w * 0.82, h * 0.1, 100);
+}
+
+function drawSiegeCastle(tile, x, y, size, theme, impactPulse) {
+  push();
+  translate(impactPulse * 3, -abs(impactPulse) * 2);
+  drawCastleStructure(tile, x, y, size);
+  drawClanCrestMark(theme.crest, x + size * 0.88, y - size * 1.42, size * 0.13, themeColor(theme, "accentDark"), 230);
+  stroke(themeColor(theme, "accentDark", 220));
+  strokeWeight(1.4);
+  line(x + size * 0.72, y - size * 0.9, x + size * 0.72, y - size * 1.55);
+  noStroke();
+  fill(themeColor(theme, "accent", 225));
+  triangle(x + size * 0.72, y - size * 1.55, x + size * 1.16, y - size * 1.42, x + size * 0.72, y - size * 1.28);
+  pop();
+  if (impactPulse > 0.2) {
+    noFill();
+    stroke(255, 240, 170, 170);
+    strokeWeight(2);
+    ellipse(x - size * 0.4, y - size * 0.62, size * (0.5 + impactPulse), size * (0.28 + impactPulse * 0.2));
+  }
+}
+
+function drawSiegeUnits(x, y, w, h, attackerTheme, defenderTheme, progress, impactPulse) {
+  const ease = progress * progress * (3 - 2 * progress);
+  for (let i = 0; i < 7; i++) {
+    const lane = (i - 3) * h * 0.055;
+    const sx = x + w * (0.18 + ease * 0.36) + (i % 2) * 12;
+    const sy = y + h * 0.72 + lane;
+    drawSiegeSoldier(sx, sy, 14, attackerTheme, 1);
+  }
+  for (let i = 0; i < 5; i++) {
+    const sx = x + w * 0.68 + (i % 2) * 16 + impactPulse * 2;
+    const sy = y + h * 0.48 + i * h * 0.045;
+    drawSiegeSoldier(sx, sy, 12, defenderTheme, -1);
+  }
+}
+
+function drawSiegeSoldier(x, y, size, theme, dir) {
+  stroke(38, 42, 48, 210);
+  strokeWeight(1.2);
+  fill(themeColor(theme, "accent", 235));
+  ellipse(x, y - size * 0.75, size * 0.55, size * 0.55);
+  rect(x - size * 0.36, y - size * 0.46, size * 0.72, size * 0.68, 3);
+  stroke(themeColor(theme, "accentDark", 230));
+  line(x + dir * size * 0.28, y - size * 0.22, x + dir * size * 0.94, y - size * 0.74);
+  line(x - size * 0.18, y + size * 0.2, x - size * 0.4, y + size * 0.64);
+  line(x + size * 0.18, y + size * 0.2, x + size * 0.42, y + size * 0.64);
+}
+
+function drawSiegeProjectiles(x, y, w, h, elapsed, progress) {
+  const active = elapsed > 46 && elapsed < 132;
+  if (!active) return;
+  stroke(66, 54, 42, 190);
+  strokeWeight(2);
+  for (let i = 0; i < 4; i++) {
+    const t = (progress + i * 0.16) % 1;
+    const px = lerp(x + w * 0.33, x + w * 0.7, t);
+    const arc = sin(t * PI) * h * 0.24;
+    const py = lerp(y + h * 0.56, y + h * 0.42, t) - arc + i * 7;
+    line(px - 12, py + 5, px + 10, py - 4);
+    noStroke();
+    fill(240, 96, 56, 190);
+    ellipse(px + 12, py - 5, 8, 6);
+    stroke(66, 54, 42, 190);
+  }
+}
+
+function drawSiegeBanner(x, y, theme, label) {
+  fill(255, 248, 236, 230);
+  stroke(themeColor(theme, "accentDark", 180));
+  strokeWeight(1.2);
+  rect(x, y, 128, 30, 6);
+  drawClanCrestMark(theme.crest, x + 18, y + 15, 6, themeColor(theme, "accentDark"), 220);
+  noStroke();
+  fill(24, 36, 50);
+  textAlign(LEFT, CENTER);
+  textSize(12);
+  text(label, x + 32, y + 15);
+}
+
+function drawSiegeStatusPanel(r, attacker, attackerOfficer, defender, hpNow, hpMax, tactic) {
+  const y = r.y + r.h - 92;
+  fill(255, 252, 246, 235);
+  stroke(68, 82, 96, 70);
+  strokeWeight(1.1);
+  rect(r.x + 24, y, r.w - 48, 54, 8);
+  noStroke();
+  fill(28, 42, 58);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  text(`攻撃: ${attacker ? attacker.name : "攻撃側"} / ${attackerOfficer ? `${attackerOfficer.name} 武${attackerOfficer.valor} 知${attackerOfficer.wit} 政${attackerOfficer.admin}` : "足軽隊"}`, r.x + 42, y + 10);
+  text(`防御: ${defender.desc}`, r.x + 42, y + 30);
+  textAlign(RIGHT, TOP);
+  text(`${tactic.name} / 城耐久 ${max(0, hpNow)}/${hpMax}`, r.x + r.w - 42, y + 10);
+  const barW = 160;
+  const bx = r.x + r.w - 42 - barW;
+  const by = y + 33;
+  fill(86, 88, 92, 80);
+  rect(bx, by, barW, 8, 4);
+  fill(196, 72, 68, 210);
+  rect(bx, by, barW * constrain(hpNow / max(1, hpMax), 0, 1), 8, 4);
+}
+
+function drawSiegeResultPanel(r) {
+  const panelW = min(520, r.w - 80);
+  const panelH = 142;
+  const x = r.x + (r.w - panelW) / 2;
+  const y = r.y + 112;
+  fill(255, 252, 246, 244);
+  stroke(48, 56, 66, 120);
+  strokeWeight(1.3);
+  rect(x, y, panelW, panelH, 10);
+  noStroke();
+  fill(24, 36, 50);
+  textAlign(LEFT, TOP);
+  textSize(17);
+  text("戦闘結果", x + 18, y + 14);
+  textSize(12);
+  fill(48, 54, 62);
+  text(siegeScene.resultLines.join("\n"), x + 18, y + 42, panelW - 36, 64);
+  drawBattleButton(siegeSceneBackRect(), "マップへ戻る", true, currentTheme());
 }
 
 // ------------------ 繝懊ち繝ｳ ------------------
@@ -3532,8 +3820,8 @@ function handleAttackTargetClick(c, r) {
   openBattlePopup(from, target, need);
 }
 
-function resolveBattleTactic(tactic) {
-  if (!battlePopup.open || battlePopup.phase !== "choose") return;
+function resolveBattleTactic(tactic, fromSiegeScene = false) {
+  if (!battlePopup.open || (battlePopup.phase !== "choose" && battlePopup.phase !== "scene")) return;
   const me = players[currentPlayer];
   const from = getTile(battlePopup.from.c, battlePopup.from.r);
   const target = getTile(battlePopup.target.c, battlePopup.target.r);
@@ -3547,6 +3835,11 @@ function resolveBattleTactic(tactic) {
   const finalCost = tacticCost(baseNeed, tactic);
   if (!tacticAvailable(tactic, target, finalCost)) {
     message = `${tactic.name} は条件を満たしていません。`;
+    return;
+  }
+
+  if (target.type === TYPE.JO && !fromSiegeScene) {
+    openSiegeScene(tactic);
     return;
   }
 
@@ -3648,6 +3941,7 @@ function canPlayerAct() {
   if (gameState !== "playing") return false;
   if (eventPopup.open) return false;
   if (workshopBuildPopup.open) return false;
+  if (siegeScene.open) return false;
   if (battlePopup.open) return false;
   if (me.id !== HUMAN_PLAYER_ID) return false;
   if (actionsLeft[HUMAN_PLAYER_ID] <= 0) {
@@ -4730,7 +5024,7 @@ function tileIcon(tileOrType) {
 
 function eventPopupRect() {
   const w = min(700, width - 80);
-  const h = 440;
+  const h = min(560, height - 70);
   return { x: (width - w) / 2, y: (height - h) / 2, w, h };
 }
 
