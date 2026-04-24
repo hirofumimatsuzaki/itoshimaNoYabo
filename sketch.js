@@ -280,11 +280,17 @@ let mountainPassTurns = {};
 let soundtrack = {
   enabled: true,
   ready: false,
+  mode: "opening",
   step: 0,
   nextAt: 0,
   tempo: 94,
   themeId: "futajo",
   phrase: [0, 2, 4, 7, 9, 7, 4, 2, 0, -3, 0, 2, 4, 2, 0, -3],
+  openingStep: 0,
+  openingNextAt: 0,
+  openingTempo: 66,
+  openingPhrase: [0, 2, 5, 7, 9, 7, 5, 2, 0, -3, 0, 2],
+  openingRoots: [38, 43, 45, 41],
   button: { x: 0, y: 0, w: 124, h: 28 },
 };
 let openingStory = {
@@ -612,6 +618,30 @@ function updateSoundtrackTheme(force = false) {
   if (soundtrack.ready && soundtrack.ctx) {
     soundtrack.nextAt = soundtrack.ctx.currentTime + 0.06;
   }
+}
+
+function soundtrackPlaybackMode() {
+  return openingStory.open ? "opening" : "game";
+}
+
+function resetSoundtrackVoices(now) {
+  if (!soundtrack.ready) return;
+  soundtrack.leadGain.gain.cancelScheduledValues(now);
+  soundtrack.leadGain.gain.setValueAtTime(0.0001, now);
+  soundtrack.bassGain.gain.cancelScheduledValues(now);
+  soundtrack.bassGain.gain.setValueAtTime(0.0001, now);
+  soundtrack.padGain.gain.cancelScheduledValues(now);
+  soundtrack.padGain.gain.setValueAtTime(0.0001, now);
+}
+
+function resetSoundtrackSequencer(now = null) {
+  if (!soundtrack.ready || !soundtrack.ctx) return;
+  const base = (now == null ? soundtrack.ctx.currentTime : now) + 0.06;
+  soundtrack.step = 0;
+  soundtrack.nextAt = base;
+  soundtrack.openingStep = 0;
+  soundtrack.openingNextAt = base;
+  resetSoundtrackVoices(base);
 }
 
 function triggerCameraShake(strength = 7, frames = 12) {
@@ -1501,14 +1531,27 @@ function ensureSoundtrack() {
   bassGain.connect(master);
   bass.start();
 
+  const pad = ctx.createOscillator();
+  pad.type = "triangle";
+  const padGain = ctx.createGain();
+  padGain.gain.value = 0;
+  pad.connect(padGain);
+  padGain.connect(master);
+  pad.start();
+
   soundtrack.ctx = ctx;
   soundtrack.master = master;
   soundtrack.lead = lead;
   soundtrack.leadGain = leadGain;
   soundtrack.bass = bass;
   soundtrack.bassGain = bassGain;
+  soundtrack.pad = pad;
+  soundtrack.padGain = padGain;
+  soundtrack.mode = soundtrackPlaybackMode();
   soundtrack.step = 0;
   soundtrack.nextAt = ctx.currentTime + 0.06;
+  soundtrack.openingStep = 0;
+  soundtrack.openingNextAt = ctx.currentTime + 0.06;
   soundtrack.ready = true;
   updateSoundtrackGain();
 }
@@ -1516,7 +1559,7 @@ function ensureSoundtrack() {
 function updateSoundtrackGain() {
   if (!soundtrack.ready) return;
   const now = soundtrack.ctx.currentTime;
-  const target = soundtrack.enabled ? 0.16 : 0.0001;
+  const target = soundtrack.enabled ? (soundtrackPlaybackMode() === "opening" ? 0.19 : 0.16) : 0.0001;
   soundtrack.master.gain.cancelScheduledValues(now);
   soundtrack.master.gain.setTargetAtTime(target, now, 0.12);
 }
@@ -1530,6 +1573,16 @@ function activateSoundtrackByGesture() {
 
 function updateSoundtrack() {
   if (!soundtrack.ready || !soundtrack.enabled) return;
+  const mode = soundtrackPlaybackMode();
+  if (soundtrack.mode !== mode) {
+    soundtrack.mode = mode;
+    resetSoundtrackSequencer(soundtrack.ctx.currentTime);
+    updateSoundtrackGain();
+  }
+  if (mode === "opening") {
+    updateOpeningSoundtrack();
+    return;
+  }
   const beat = 60 / soundtrack.tempo;
   const lookAhead = 0.12;
   while (soundtrack.nextAt <= soundtrack.ctx.currentTime + lookAhead) {
@@ -1554,6 +1607,42 @@ function updateSoundtrack() {
 
     soundtrack.step++;
     soundtrack.nextAt += beat / 2;
+  }
+}
+
+function updateOpeningSoundtrack() {
+  const beat = 60 / soundtrack.openingTempo;
+  const lookAhead = 0.18;
+  while (soundtrack.openingNextAt <= soundtrack.ctx.currentTime + lookAhead) {
+    const t = soundtrack.openingNextAt;
+    const step = soundtrack.openingStep;
+    const phraseOffset = soundtrack.openingPhrase[step % soundtrack.openingPhrase.length];
+    const root = soundtrack.openingRoots[floor(step / 3) % soundtrack.openingRoots.length];
+    const leadMidi = 62 + phraseOffset;
+    const padMidi = root + 12 + (step % 2 === 0 ? 7 : 12);
+
+    soundtrack.lead.frequency.setValueAtTime(midiToHz(leadMidi), t);
+    soundtrack.leadGain.gain.cancelScheduledValues(t);
+    soundtrack.leadGain.gain.setValueAtTime(0.0001, t);
+    soundtrack.leadGain.gain.linearRampToValueAtTime(0.055, t + 0.05);
+    soundtrack.leadGain.gain.exponentialRampToValueAtTime(0.0001, t + beat * 0.82);
+
+    soundtrack.pad.frequency.setValueAtTime(midiToHz(padMidi), t);
+    soundtrack.padGain.gain.cancelScheduledValues(t);
+    soundtrack.padGain.gain.setValueAtTime(0.0001, t);
+    soundtrack.padGain.gain.linearRampToValueAtTime(0.04, t + 0.16);
+    soundtrack.padGain.gain.exponentialRampToValueAtTime(0.0001, t + beat * 1.8);
+
+    if (step % 3 === 0) {
+      soundtrack.bass.frequency.setValueAtTime(midiToHz(root), t);
+      soundtrack.bassGain.gain.cancelScheduledValues(t);
+      soundtrack.bassGain.gain.setValueAtTime(0.0001, t);
+      soundtrack.bassGain.gain.linearRampToValueAtTime(0.052, t + 0.04);
+      soundtrack.bassGain.gain.exponentialRampToValueAtTime(0.0001, t + beat * 2.4);
+    }
+
+    soundtrack.openingStep++;
+    soundtrack.openingNextAt += beat;
   }
 }
 
