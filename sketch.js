@@ -747,6 +747,25 @@ function openingStoryNextContains(mx, my) {
   return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
 }
 
+function wrapTextToWidth(str, maxWidth) {
+  const src = `${str || ""}`;
+  const lines = [];
+  for (const rawLine of src.split("\n")) {
+    let line = "";
+    for (const ch of rawLine) {
+      const next = line + ch;
+      if (line && textWidth(next) > maxWidth) {
+        lines.push(line);
+        line = ch;
+      } else {
+        line = next;
+      }
+    }
+    lines.push(line || "");
+  }
+  return lines.join("\n");
+}
+
 function drawOpeningStory() {
   if (!openingStory.open) return;
   const page = OPENING_STORY[openingStory.index] || OPENING_STORY[0];
@@ -773,7 +792,9 @@ function drawOpeningStory() {
   fill(255, 248, 236);
   textAlign(LEFT, TOP);
   textSize(30);
-  text(page.title, r.x + 28, r.y + 70);
+  textLeading(34);
+  const wrappedTitle = wrapTextToWidth(page.title, r.w - 150);
+  text(wrappedTitle, r.x + 28, r.y + 70, r.w - 150, 72);
 
   fill(226, 232, 242);
   textSize(15);
@@ -809,11 +830,15 @@ function drawOpeningStory() {
   fill(34, 36, 42);
   textAlign(LEFT, TOP);
   textSize(17);
-  text(page.body, r.x + 34, r.y + 372, r.w - 68, 96);
+  textLeading(28);
+  const wrappedBody = wrapTextToWidth(page.body, r.w - 68);
+  text(wrappedBody, r.x + 34, r.y + 372, r.w - 68, 112);
 
   fill(themeColor(theme, "accentDark"));
   textSize(14);
-  text(page.note, r.x + 34, r.y + 470, r.w - 240, 40);
+  textLeading(22);
+  const wrappedNote = wrapTextToWidth(page.note, r.w - 240);
+  text(wrappedNote, r.x + 34, r.y + 486, r.w - 240, 40);
 
   fill(108);
   textAlign(LEFT, CENTER);
