@@ -56,6 +56,27 @@ const WORKSHOP_BUILD_OPTIONS = [
   { kind: WORKSHOP_KIND.POTTERY, label: "陶芸工房" },
 ];
 
+const OPENING_STORY = [
+  {
+    chapter: "序",
+    title: "潮境の糸島",
+    body: "博多湾の西、玄界灘に向き合う糸島では、海と山の恵みをめぐって三つの勢力がせめぎ合っていた。港は富を運び、峠は兵を導き、社寺は人の心を束ねる。",
+    note: "土地を治めるには、武だけでなく文化と商いも要る。",
+  },
+  {
+    chapter: "変",
+    title: "都からの圧",
+    body: "京からは勅命が下り、諸勢力には祭礼、交易、人集め、開発の成果が求められるようになった。応えられぬ者は名を失い、応えた者は糸島全土に影響を広げていく。",
+    note: "数ターンごとに情勢は変わり、機を逃せば主導権は移る。",
+  },
+  {
+    chapter: "起",
+    title: "新たな当主",
+    body: "いま、あなたは二丈・伊都・志摩のいずれかを率い、この地の行く末を決める。城を築くか、工房を育てるか、信仰と文化で民心をつかむか。",
+    note: "クリックで物語を進め、最後に開始勢力を選ぶ。",
+  },
+];
+
 
 // ---------- バランス ----------
 const CULTURE_FLIP = 14;
@@ -258,6 +279,10 @@ let soundtrack = {
   phrase: [0, 2, 4, 7, 9, 7, 4, 2, 0, -3, 0, 2, 4, 2, 0, -3],
   button: { x: 0, y: 0, w: 124, h: 28 },
 };
+let openingStory = {
+  open: true,
+  index: 0,
+};
 let startPickPopup = { open: true };
 let artLibrary = {
   status: "idle",
@@ -444,7 +469,7 @@ function setup() {
 
   textFont('"BIZ UDPMincho", "Yu Mincho", "Hiragino Mincho ProN", serif');
   initializeGame();
-  openStartPickPopup();
+  openOpeningStory();
 }
 
 function startBaseTile(playerId) {
@@ -457,6 +482,23 @@ function startBaseName(playerId) {
   if (playerId === 1) return "二丈城";
   if (playerId === 2) return "怡土城";
   return "桜井神社";
+}
+
+function openOpeningStory() {
+  openingStory.open = true;
+  openingStory.index = 0;
+  startPickPopup.open = false;
+  message = "オープニングストーリーを読んでください。";
+}
+
+function advanceOpeningStory() {
+  if (!openingStory.open) return;
+  if (openingStory.index < OPENING_STORY.length - 1) {
+    openingStory.index++;
+    return;
+  }
+  openingStory.open = false;
+  openStartPickPopup();
 }
 
 function openStartPickPopup() {
@@ -479,6 +521,7 @@ function openInfoPopup(title, desc, effectText, usedLabel = "確認", cardId = "
 function beginGameAs(playerId) {
   HUMAN_PLAYER_ID = playerId;
   initializeGame();
+  openingStory.open = false;
   startPickPopup.open = false;
   currentPlayer = max(0, players.findIndex((p) => p.id === HUMAN_PLAYER_ID));
   selected = startBaseTile(HUMAN_PLAYER_ID);
@@ -648,6 +691,96 @@ function drawStartPickPopup() {
     fill(40);
     text("クリックで開始", op.x + 12, op.y + 68);
   }
+}
+
+function openingStoryRect() {
+  const w = min(760, width - 80);
+  const h = min(560, height - 70);
+  return { x: (width - w) / 2, y: (height - h) / 2, w, h };
+}
+
+function openingStoryNextRect() {
+  const r = openingStoryRect();
+  return { x: r.x + r.w - 196, y: r.y + r.h - 64, w: 160, h: 40 };
+}
+
+function openingStoryNextContains(mx, my) {
+  const r = openingStoryNextRect();
+  return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+}
+
+function drawOpeningStory() {
+  if (!openingStory.open) return;
+  const page = OPENING_STORY[openingStory.index] || OPENING_STORY[0];
+  const theme = clanTheme((openingStory.index % 3) + 1);
+  const r = openingStoryRect();
+
+  fill(7, 10, 18, 170);
+  rect(0, 0, width, height);
+  drawPanelCard(r.x, r.y, r.w, r.h, 24);
+  drawThemeFrame(r.x, r.y, r.w, r.h, theme, 24);
+  fillLinearGradientRect(r.x + 18, r.y + 18, r.w - 36, 180,
+    color(36, 54, 84, 242), themeColor(theme, "accentDark"), false, 18);
+
+  const badgeW = 70;
+  fill(248, 236, 202, 230);
+  noStroke();
+  rect(r.x + 28, r.y + 28, badgeW, 28, 14);
+  fill(74, 54, 24);
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  text(page.chapter, r.x + 28 + badgeW / 2, r.y + 42);
+
+  fill(255, 248, 236);
+  textAlign(LEFT, TOP);
+  textSize(30);
+  text(page.title, r.x + 28, r.y + 70);
+
+  fill(226, 232, 242);
+  textSize(15);
+  text("糸島三国記 オープニング", r.x + 30, r.y + 124);
+
+  const artX = r.x + 26;
+  const artY = r.y + 176;
+  const artW = r.w - 52;
+  const artH = 168;
+  fillLinearGradientRect(artX, artY, artW, artH, themeColor(theme, "accentLight"), color(244, 236, 220), true, 20);
+  noStroke();
+  for (let i = 0; i < 6; i++) {
+    fill(255, 255, 255, 36);
+    ellipse(artX + 70 + i * 105, artY + 44 + sin(frameCount * 0.03 + i) * 10, 72, 26);
+  }
+  fill(92, 122, 136, 170);
+  rect(artX, artY + artH - 42, artW, 42, 0, 0, 20, 20);
+  drawClanCrestMark(theme.crest, artX + 90, artY + 92, 28, themeColor(theme, "accentDark"), 130);
+  drawClanCrestMark("sun", artX + artW - 132, artY + 82, 22, color(242, 182, 92), 120);
+  drawClanCrestMark("leaf", artX + artW * 0.52, artY + 106, 24, color(72, 124, 88), 120);
+
+  fill(34, 36, 42);
+  textAlign(LEFT, TOP);
+  textSize(17);
+  text(page.body, r.x + 34, r.y + 372, r.w - 68, 96);
+
+  fill(themeColor(theme, "accentDark"));
+  textSize(14);
+  text(page.note, r.x + 34, r.y + 470, r.w - 240, 40);
+
+  fill(108);
+  textAlign(LEFT, CENTER);
+  textSize(12);
+  text(`${openingStory.index + 1} / ${OPENING_STORY.length}`, r.x + 34, r.y + r.h - 44);
+
+  const next = openingStoryNextRect();
+  fillLinearGradientRect(next.x, next.y, next.w, next.h, themeColor(theme, "accent"), themeColor(theme, "accentDark"), false, 12);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(14);
+  text(openingStory.index === OPENING_STORY.length - 1 ? "勢力選択へ" : "次へ", next.x + next.w / 2, next.y + next.h / 2);
+
+  fill(96);
+  textSize(12);
+  text("画面クリックでも進行できます。", r.x + r.w - 216, r.y + r.h - 86);
 }
 function drawUiIcon(kind, x, y, size = 8) {
   push();
@@ -1969,6 +2102,7 @@ function draw() {
   if (gameState !== "playing") drawWinPopup();
   if (battlePopup.open && !siegeScene.open) drawBattlePopup();
   if (siegeScene.open) drawSiegeScene();
+  if (openingStory.open) drawOpeningStory();
   if (startPickPopup.open) drawStartPickPopup();
   updateSoundtrack();
 }
@@ -1977,6 +2111,18 @@ function mousePressed() {
   activateSoundtrackByGesture();
   if (soundtrackButtonContains(mouseX, mouseY)) {
     toggleSoundtrack();
+    return;
+  }
+
+  if (openingStory.open) {
+    if (openingStoryNextContains(mouseX, mouseY)) {
+      advanceOpeningStory();
+      return;
+    }
+    const r = openingStoryRect();
+    if (mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h) {
+      advanceOpeningStory();
+    }
     return;
   }
 
@@ -2017,7 +2163,7 @@ function mousePressed() {
 
   if (gameState !== "playing") {
     if (winPopupRestartContains(mouseX, mouseY)) {
-      openStartPickPopup();
+      openOpeningStory();
     }
     return;
   }
