@@ -19,7 +19,7 @@ const ISO_TILE_W = HEX_W * 1.02;
 const ISO_TILE_H = HEX_SIZE * 0.9;
 const ISO_TILE_DEPTH = 0;
 const ISO_TILE_OVERLAP = 2.6;
-const ASSET_REV = "20260423a";
+const ASSET_REV = "20260424a";
 const STRUCTURE_VISUAL_SCALE = 0.62;
 const TILE_NAME_W = 96;
 const TILE_NAME_H = 24;
@@ -62,18 +62,21 @@ const OPENING_STORY = [
     title: "潮境の糸島",
     body: "博多湾の西、玄界灘に向き合う糸島では、海と山の恵みをめぐって三つの勢力がせめぎ合っていた。港は富を運び、峠は兵を導き、社寺は人の心を束ねる。",
     note: "土地を治めるには、武だけでなく文化と商いも要る。",
+    artId: "opening01",
   },
   {
     chapter: "変",
     title: "都からの圧",
     body: "京からは勅命が下り、諸勢力には祭礼、交易、人集め、開発の成果が求められるようになった。応えられぬ者は名を失い、応えた者は糸島全土に影響を広げていく。",
     note: "数ターンごとに情勢は変わり、機を逃せば主導権は移る。",
+    artId: "opening02",
   },
   {
     chapter: "起",
     title: "新たな当主",
     body: "いま、あなたは二丈・伊都・志摩のいずれかを率い、この地の行く末を決める。城を築くか、工房を育てるか、信仰と文化で民心をつかむか。",
     note: "クリックで物語を進め、最後に開始勢力を選ぶ。",
+    artId: "opening03",
   },
 ];
 
@@ -185,6 +188,11 @@ const ART_SPRITES = {
     recruitOfficer: { path: `assets/event-recruit-officer.png?v=${ASSET_REV}` },
     imperialMission: { path: `assets/event-imperial-mission.png?v=${ASSET_REV}` },
     castleFall: { path: `assets/event-castle-fall.png?v=${ASSET_REV}` },
+  },
+  openings: {
+    opening01: { path: `assets/opening-01.png?v=${ASSET_REV}` },
+    opening02: { path: `assets/opening-02.png?v=${ASSET_REV}` },
+    opening03: { path: `assets/opening-03.png?v=${ASSET_REV}` },
   },
 };
 
@@ -714,6 +722,7 @@ function drawOpeningStory() {
   const page = OPENING_STORY[openingStory.index] || OPENING_STORY[0];
   const theme = clanTheme((openingStory.index % 3) + 1);
   const r = openingStoryRect();
+  const art = page.artId ? artEntry(`openings.${page.artId}`) : null;
 
   fill(7, 10, 18, 170);
   rect(0, 0, width, height);
@@ -744,17 +753,28 @@ function drawOpeningStory() {
   const artY = r.y + 176;
   const artW = r.w - 52;
   const artH = 168;
-  fillLinearGradientRect(artX, artY, artW, artH, themeColor(theme, "accentLight"), color(244, 236, 220), true, 20);
-  noStroke();
-  for (let i = 0; i < 6; i++) {
-    fill(255, 255, 255, 36);
-    ellipse(artX + 70 + i * 105, artY + 44 + sin(frameCount * 0.03 + i) * 10, 72, 26);
+  if (art && art.ready && art.img) {
+    drawEventArtImage(art.img, artX, artY, artW, artH);
+    fill(12, 18, 30, 92);
+    noStroke();
+    rect(artX, artY + artH - 44, artW, 44, 0, 0, 18, 18);
+  } else {
+    fillLinearGradientRect(artX, artY, artW, artH, themeColor(theme, "accentLight"), color(244, 236, 220), true, 20);
+    noStroke();
+    for (let i = 0; i < 6; i++) {
+      fill(255, 255, 255, 36);
+      ellipse(artX + 70 + i * 105, artY + 44 + sin(frameCount * 0.03 + i) * 10, 72, 26);
+    }
+    fill(92, 122, 136, 170);
+    rect(artX, artY + artH - 42, artW, 42, 0, 0, 20, 20);
+    drawClanCrestMark(theme.crest, artX + 90, artY + 92, 28, themeColor(theme, "accentDark"), 130);
+    drawClanCrestMark("sun", artX + artW - 132, artY + 82, 22, color(242, 182, 92), 120);
+    drawClanCrestMark("leaf", artX + artW * 0.52, artY + 106, 24, color(72, 124, 88), 120);
+    fill(255, 250);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    text("情景画を読込中", artX + artW / 2, artY + artH / 2);
   }
-  fill(92, 122, 136, 170);
-  rect(artX, artY + artH - 42, artW, 42, 0, 0, 20, 20);
-  drawClanCrestMark(theme.crest, artX + 90, artY + 92, 28, themeColor(theme, "accentDark"), 130);
-  drawClanCrestMark("sun", artX + artW - 132, artY + 82, 22, color(242, 182, 92), 120);
-  drawClanCrestMark("leaf", artX + artW * 0.52, artY + 106, 24, color(72, 124, 88), 120);
 
   fill(34, 36, 42);
   textAlign(LEFT, TOP);

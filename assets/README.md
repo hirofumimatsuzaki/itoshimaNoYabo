@@ -18,6 +18,9 @@
 - `structure-workshop-washi.png`
 - `structure-workshop-pottery.png`
 - `event-castle-fall.png`
+- `opening-01.png`
+- `opening-02.png`
+- `opening-03.png`
 
 ## 想定ファイル
 
