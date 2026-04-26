@@ -109,6 +109,12 @@ const MISSION_OFFER_CHANCE = 0.35;
 const MISSION_CARRY_TURNS = 2;
 const RECRUIT_COST = 4;
 const SEASON_SPAN_TURNS = 3;
+const CASTLE_BATTLE_TIME_LIMIT = 20 * 60;
+const CASTLE_BATTLE_PLAYER_SPEED = 0.08;
+const CASTLE_BATTLE_ENEMY_SPEED = 0.048;
+const CASTLE_BATTLE_PLAYER_ATTACK_COOLDOWN = 18;
+const CASTLE_BATTLE_ENEMY_ATTACK_COOLDOWN = 28;
+const CASTLE_BATTLE_ATTACK_RANGE = 1.15;
 let HUMAN_PLAYER_ID = 1;
 const POP_GROWTH_FOOD_STEP = 6;
 const MAX_POP_GROWTH_PER_TURN = 2;
@@ -271,8 +277,10 @@ let siegeScene = {
   resolved: false,
   resultText: "",
   resultLines: [],
+  castleBattle: null,
 };
 let tileFx = [];
+let pressedKeys = {};
 
 let buttons = [];
 
@@ -2201,7 +2209,9 @@ function initializeGame() {
   siegeScene.lastCommand = null;
   siegeScene.lastOutcome = null;
   siegeScene.resolved = false;
+  siegeScene.castleBattle = null;
   tileFx = [];
+  pressedKeys = {};
   mountainPassTurns = makePlayerStateMap(0);
   flipCapturesThisTurn = makePlayerStateMap(0);
   missionStateByPlayer = makePlayerStateMap(null);
@@ -2323,6 +2333,28 @@ function mousePressed() {
       return;
     }
   }
+}
+
+function keyPressed() {
+  pressedKeys[key] = true;
+  pressedKeys[keyCode] = true;
+  if (siegeScene.open && !siegeScene.resolved && siegeScene.phase === "action") {
+    if (key === " " || keyCode === 13) {
+      triggerCastleBattleAttack();
+      return false;
+    }
+    if (key === "Escape" || keyCode === 27) {
+      finishSiegeBattle(false, true);
+      return false;
+    }
+  }
+  return true;
+}
+
+function keyReleased() {
+  pressedKeys[key] = false;
+  pressedKeys[keyCode] = false;
+  return true;
 }
 
 // ------------------ グリッド生成 ------------------
@@ -3261,9 +3293,11 @@ function openSiegeScene(tactic) {
     resolved: false,
     resultText: "",
     resultLines: [],
+    castleBattle: createCastleBattleState(tactic, target),
   };
   battlePopup.phase = "scene";
-  message = `${tileLabel(target)}攻城戦: 指示を選んでください。`;
+  siegeScene.phase = "action";
+  message = `${tileLabel(target)}攻城戦: 城内へ突入し、武将を直接操作してください。`;
 }
 
 function siegeSceneBackRect() {
@@ -3283,6 +3317,10 @@ function handleSiegeSceneClick(mx, my) {
       siegeScene.open = false;
       battlePopup.open = false;
     }
+    return;
+  }
+  if (siegeScene.phase === "action") {
+    if (rectContains(castleBattleRetreatRect(), mx, my)) finishSiegeBattle(false, true);
     return;
   }
   if (siegeScene.phase === "anim") {
@@ -3453,13 +3491,14 @@ function finishSiegeBattle(captured, withdrew) {
 }
 
 function drawSiegeScene() {
-  const elapsed = frameCount - siegeScene.startedAt;
-  updateSiegeSceneResolution(elapsed);
-
   const r = siegeSceneRect();
   const fromTile = siegeScene.from ? getTile(siegeScene.from.c, siegeScene.from.r) : null;
   const targetTile = siegeScene.target ? getTile(siegeScene.target.c, siegeScene.target.r) : null;
   if (!fromTile || !targetTile) return;
+
+  if (siegeScene.phase === "action") updateCastleBattleFrame();
+  const elapsed = frameCount - siegeScene.startedAt;
+  if (siegeScene.phase !== "action") updateSiegeSceneResolution(elapsed);
 
   const attacker = playerById(HUMAN_PLAYER_ID);
   const defenderPlayer = playerById(siegeScene.target.owner);
@@ -3492,12 +3531,16 @@ function drawSiegeScene() {
   fill(72, 78, 88);
   text(`${siegeScene.from.name} から ${siegeScene.target.name} へ進軍 / 戦術: ${tactic.name} / ${siegeScene.round}/${siegeScene.maxRounds}R`, r.x + 30, r.y + 54);
 
-  drawSiegeHills(fieldX, fieldY, fieldW, fieldH);
-  drawSiegeCastle(targetTile, fieldX + fieldW * 0.74, fieldY + fieldH * 0.62, min(62, fieldH * 0.18), defenderTheme, impactPulse);
-  drawSiegeUnits(fieldX, fieldY, fieldW, fieldH, attackerTheme, defenderTheme, troopProgress, impactPulse);
-  drawSiegeProjectiles(fieldX, fieldY, fieldW, fieldH, elapsed, troopProgress);
-  drawSiegeBanner(fieldX + 22, fieldY + 24, attackerTheme, attacker ? attacker.name : "攻撃側");
-  drawSiegeBanner(fieldX + fieldW - 150, fieldY + 24, defenderTheme, defenderPlayer ? defenderPlayer.name : "防御側");
+  if (siegeScene.phase === "action") {
+    drawCastleBattleScene(fieldX, fieldY, fieldW, fieldH, attackerTheme, defenderTheme, attacker, defenderPlayer);
+  } else {
+    drawSiegeHills(fieldX, fieldY, fieldW, fieldH);
+    drawSiegeCastle(targetTile, fieldX + fieldW * 0.74, fieldY + fieldH * 0.62, min(62, fieldH * 0.18), defenderTheme, impactPulse);
+    drawSiegeUnits(fieldX, fieldY, fieldW, fieldH, attackerTheme, defenderTheme, troopProgress, impactPulse);
+    drawSiegeProjectiles(fieldX, fieldY, fieldW, fieldH, elapsed, troopProgress);
+    drawSiegeBanner(fieldX + 22, fieldY + 24, attackerTheme, attacker ? attacker.name : "攻撃側");
+    drawSiegeBanner(fieldX + fieldW - 150, fieldY + 24, defenderTheme, defenderPlayer ? defenderPlayer.name : "防御側");
+  }
 
   const hpMax = siegeScene.hpMax || siegeScene.target.hpMax || castleMaxHp(targetTile);
   const hpNow = siegeScene.resolved && targetTile.owner === HUMAN_PLAYER_ID ? 0 : siegeScene.hp;
@@ -3505,6 +3548,8 @@ function drawSiegeScene() {
 
   if (siegeScene.resolved) {
     drawSiegeResultPanel(r);
+  } else if (siegeScene.phase === "action") {
+    drawCastleBattleHud(r);
   } else if (siegeScene.phase === "command") {
     drawSiegeCommandCards();
   } else {
@@ -3527,6 +3572,98 @@ function drawSiegeHills(x, y, w, h) {
   endShape(CLOSE);
   fill(92, 88, 74, 48);
   rect(x + w * 0.1, y + h * 0.72, w * 0.82, h * 0.1, 100);
+}
+
+function drawCastleBattleScene(x, y, w, h, attackerTheme, defenderTheme, attacker, defenderPlayer) {
+  const battle = siegeScene.castleBattle;
+  if (!battle) return;
+  const tileSize = min(floor(w / battle.cols), floor(h / battle.rows));
+  const mapW = tileSize * battle.cols;
+  const mapH = tileSize * battle.rows;
+  const ox = x + (w - mapW) / 2;
+  const oy = y + (h - mapH) / 2;
+  battle.originX = ox;
+  battle.originY = oy;
+  battle.tileSize = tileSize;
+
+  noStroke();
+  fill(76, 70, 64);
+  rect(ox - 8, oy - 8, mapW + 16, mapH + 16, 10);
+  for (let row = 0; row < battle.rows; row++) {
+    for (let col = 0; col < battle.cols; col++) {
+      const cell = battle.tiles[row][col];
+      const px = ox + col * tileSize;
+      const py = oy + row * tileSize;
+      if (cell === "#") {
+        fill(84, 84, 92);
+      } else if (cell === "K") {
+        fill(156, 118, 96);
+      } else {
+        fill((row + col) % 2 === 0 ? color(214, 204, 180) : color(206, 196, 172));
+      }
+      rect(px, py, tileSize, tileSize, 3);
+      if (cell === "K") {
+        fill(110, 48, 38, 180);
+        rect(px + tileSize * 0.16, py + tileSize * 0.16, tileSize * 0.68, tileSize * 0.68, 4);
+      }
+    }
+  }
+
+  const keepPulse = 0.75 + 0.25 * sin(frameCount * 0.12);
+  fill(255, 220, 150, 150 * keepPulse);
+  ellipse(ox + battle.keep.x * tileSize, oy + battle.keep.y * tileSize, tileSize * 0.66, tileSize * 0.66);
+
+  for (const enemy of battle.enemies) {
+    if (!enemy.alive) continue;
+    drawCastleBattleUnit(ox, oy, tileSize, enemy, defenderTheme, -1);
+  }
+  if (battle.player.blink <= 0 || frameCount % 6 < 3) {
+    drawCastleBattleUnit(ox, oy, tileSize, battle.player, attackerTheme, 1, true);
+  }
+
+  drawSiegeBanner(ox, oy - 38, attackerTheme, attacker ? attacker.name : "攻撃側");
+  drawSiegeBanner(ox + mapW - 128, oy - 38, defenderTheme, defenderPlayer ? defenderPlayer.name : "防御側");
+}
+
+function drawCastleBattleUnit(ox, oy, tileSize, unit, theme, dir, isPlayer = false) {
+  const px = ox + unit.x * tileSize;
+  const py = oy + unit.y * tileSize;
+  const body = tileSize * (isPlayer ? 0.34 : 0.3);
+  stroke(34, 34, 42, 180);
+  strokeWeight(1.2);
+  fill(themeColor(theme, "accent", isPlayer ? 245 : 225));
+  ellipse(px, py - body * 0.42, body * 0.9, body * 0.9);
+  rect(px - body * 0.42, py - body * 0.15, body * 0.84, body * 0.95, 4);
+  stroke(themeColor(theme, "accentDark", 220));
+  line(px + dir * body * 0.2, py + body * 0.08, px + dir * body * 0.85, py - body * 0.38);
+  noStroke();
+  if (!isPlayer && unit.maxHp > 1) {
+    fill(50, 58, 66, 160);
+    rect(px - body * 0.6, py + body * 0.78, body * 1.2, 4, 2);
+    fill(210, 82, 72, 210);
+    rect(px - body * 0.6, py + body * 0.78, body * 1.2 * constrain(unit.hp / unit.maxHp, 0, 1), 4, 2);
+  }
+}
+
+function drawCastleBattleHud(r) {
+  const battle = siegeScene.castleBattle;
+  if (!battle) return;
+  const player = battle.player;
+  const x = r.x + 24;
+  const y = r.y + r.h - 96;
+  fill(255, 252, 246, 236);
+  stroke(68, 82, 96, 70);
+  strokeWeight(1.1);
+  rect(x, y, r.w - 48, 76, 8);
+  noStroke();
+  fill(28, 42, 58);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  const remainSec = max(0, ceil(battle.timer / 60));
+  text(`城内戦 ${siegeScene.round}/${siegeScene.maxRounds}R  兵勢 ${player.hp}/${player.maxHp}  残り ${remainSec}秒  追加消費 武力-${siegeScene.extraCost}`, x + 16, y + 12);
+  text(battle.lastHitText, x + 16, y + 32, r.w - 220, 18);
+  text("操作: 移動 WASD/矢印  攻撃 Space/Enter  撤退 Esc", x + 16, y + 50);
+  drawBattleButton(castleBattleRetreatRect(), "撤退", true, currentTheme());
 }
 
 function drawSiegeCastle(tile, x, y, size, theme, impactPulse) {
@@ -4093,6 +4230,20 @@ const SIEGE_COMMANDS = [
   },
 ];
 
+const CASTLE_BATTLE_LAYOUT = [
+  "################",
+  "#E.....#......K#",
+  "#.###..#..###..#",
+  "#...#.....#....#",
+  "###.#.###.#.##.#",
+  "#...#...#.#....#",
+  "#.#####.#.###..#",
+  "#.....#.#...#..#",
+  "#.###.#.###.#..#",
+  "#G....#.....#..#",
+  "################",
+];
+
 function battleRect() {
   const w = min(760, width - 80);
   const h = 430;
@@ -4120,6 +4271,266 @@ function battleOkRect() {
 function battleCancelRect() {
   const r = battleRect();
   return { x: r.x + 24, y: r.y + r.h - 58, w: 118, h: 34 };
+}
+
+function castleBattleRetreatRect() {
+  const r = siegeSceneRect();
+  return { x: r.x + r.w - 154, y: r.y + 18, w: 126, h: 34 };
+}
+
+function createCastleBattleState(tactic, target) {
+  const attackerOfficer = battleAttackerOfficer();
+  const defender = tileDefenseProfile(target);
+  const tiles = CASTLE_BATTLE_LAYOUT.map((row) => row.split(""));
+  const defenders = [];
+  let entry = { x: 1.5, y: 1.5 };
+  let keep = { x: tiles[0].length - 1.5, y: 1.5 };
+  for (let y = 0; y < tiles.length; y++) {
+    for (let x = 0; x < tiles[y].length; x++) {
+      const cell = tiles[y][x];
+      if (cell === "E") {
+        entry = { x: x + 0.5, y: y + 0.5 };
+        tiles[y][x] = ".";
+      } else if (cell === "K") {
+        keep = { x: x + 0.5, y: y + 0.5 };
+      } else if (cell === "G") {
+        defenders.push({
+          id: `gate-${x}-${y}`,
+          kind: "gate",
+          name: "門番",
+          x: x + 0.5,
+          y: y + 0.5,
+          hp: 2,
+          maxHp: 2,
+          speed: CASTLE_BATTLE_ENEMY_SPEED,
+          damageReward: 1,
+          attack: 1,
+          cooldown: 0,
+          aggro: 4.2,
+          alive: true,
+        });
+        tiles[y][x] = ".";
+      }
+    }
+  }
+  defenders.push(
+    {
+      id: "hall-guard-a",
+      kind: "guard",
+      name: "足軽",
+      x: 6.5,
+      y: 3.5,
+      hp: 2,
+      maxHp: 2,
+      speed: CASTLE_BATTLE_ENEMY_SPEED,
+      damageReward: 1,
+      attack: 1,
+      cooldown: 0,
+      aggro: 4.5,
+      alive: true,
+    },
+    {
+      id: "hall-guard-b",
+      kind: "guard",
+      name: "足軽",
+      x: 10.5,
+      y: 7.5,
+      hp: 2,
+      maxHp: 2,
+      speed: CASTLE_BATTLE_ENEMY_SPEED,
+      damageReward: 1,
+      attack: 1,
+      cooldown: 0,
+      aggro: 4.5,
+      alive: true,
+    },
+    {
+      id: "keep-captain",
+      kind: "captain",
+      name: defender.hasOfficer ? defender.name : "守備隊長",
+      x: keep.x - 1,
+      y: keep.y + 1,
+      hp: defender.hasOfficer ? 4 : 3,
+      maxHp: defender.hasOfficer ? 4 : 3,
+      speed: CASTLE_BATTLE_ENEMY_SPEED * 1.05,
+      damageReward: 2,
+      attack: defender.hasOfficer ? 2 : 1,
+      cooldown: 0,
+      aggro: 6,
+      alive: true,
+    },
+  );
+  return {
+    cols: tiles[0].length,
+    rows: tiles.length,
+    tiles,
+    keep,
+    entry,
+    timer: CASTLE_BATTLE_TIME_LIMIT,
+    player: {
+      x: entry.x,
+      y: entry.y,
+      dirX: 1,
+      dirY: 0,
+      hp: 5 + max(0, floor((attackerOfficer ? attackerOfficer.valor : 3) / 3)),
+      maxHp: 5 + max(0, floor((attackerOfficer ? attackerOfficer.valor : 3) / 3)),
+      cooldown: 0,
+      invuln: 0,
+      blink: 0,
+    },
+    enemies: defenders,
+    objectiveDamage: 0,
+    hpLostTotal: 0,
+    lastHitText: "矢印/WASDで移動、Space/Enterで攻撃。守将を討つか本丸へ切り込め。",
+  };
+}
+
+function castleBattleTileAt(battle, x, y) {
+  const cx = floor(x);
+  const cy = floor(y);
+  if (!battle || cy < 0 || cy >= battle.rows || cx < 0 || cx >= battle.cols) return "#";
+  return battle.tiles[cy][cx];
+}
+
+function castleBattleWalkable(battle, x, y) {
+  const pad = 0.26;
+  const checks = [
+    { x: x - pad, y: y - pad },
+    { x: x + pad, y: y - pad },
+    { x: x - pad, y: y + pad },
+    { x: x + pad, y: y + pad },
+  ];
+  for (const p of checks) {
+    if (castleBattleTileAt(battle, p.x, p.y) === "#") return false;
+  }
+  return true;
+}
+
+function castleBattleMoveUnit(battle, unit, dx, dy) {
+  if (!battle || !unit) return;
+  const nextX = unit.x + dx;
+  const nextY = unit.y + dy;
+  if (dx !== 0 && castleBattleWalkable(battle, nextX, unit.y)) unit.x = nextX;
+  if (dy !== 0 && castleBattleWalkable(battle, unit.x, nextY)) unit.y = nextY;
+}
+
+function resetCastleBattleRound(reason) {
+  const battle = siegeScene.castleBattle;
+  if (!battle) return;
+  siegeScene.extraCost += 1;
+  if (siegeScene.round >= siegeScene.maxRounds) {
+    finishSiegeBattle(false, false);
+    return;
+  }
+  siegeScene.round += 1;
+  battle.player.x = battle.entry.x;
+  battle.player.y = battle.entry.y;
+  battle.player.dirX = 1;
+  battle.player.dirY = 0;
+  battle.player.hp = battle.player.maxHp;
+  battle.player.cooldown = 0;
+  battle.player.invuln = 36;
+  battle.player.blink = 18;
+  battle.timer = CASTLE_BATTLE_TIME_LIMIT;
+  battle.lastHitText = `${reason} ${siegeScene.round}/${siegeScene.maxRounds}Rへ。`;
+  siegeScene.logs.push(`${siegeScene.round - 1}R ${reason}`);
+  message = `城内戦 ${siegeScene.round}/${siegeScene.maxRounds}: 再突入してください。`;
+}
+
+function finishCastleBattleObjective(amount, label) {
+  if (!siegeScene.castleBattle || siegeScene.resolved) return;
+  siegeScene.castleBattle.objectiveDamage += amount;
+  siegeScene.hp = max(0, siegeScene.hp - amount);
+  siegeScene.logs.push(`${siegeScene.round}R ${label}: 城耐久 ${max(0, siegeScene.hp + amount)}->${siegeScene.hp}`);
+  siegeScene.castleBattle.lastHitText = `${label}で城耐久-${amount}`;
+  message = `${label}: 城耐久 ${siegeScene.hp}/${siegeScene.hpMax}`;
+  if (siegeScene.hp <= 0) {
+    finishSiegeBattle(true, false);
+  }
+}
+
+function triggerCastleBattleAttack() {
+  const battle = siegeScene.castleBattle;
+  if (!siegeScene.open || siegeScene.resolved || siegeScene.phase !== "action" || !battle) return;
+  const player = battle.player;
+  if (player.cooldown > 0) return;
+  player.cooldown = CASTLE_BATTLE_PLAYER_ATTACK_COOLDOWN;
+  let hitSomething = false;
+  for (const enemy of battle.enemies) {
+    if (!enemy.alive) continue;
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const distSq = dx * dx + dy * dy;
+    const facing = dx * player.dirX + dy * player.dirY;
+    if (distSq <= CASTLE_BATTLE_ATTACK_RANGE * CASTLE_BATTLE_ATTACK_RANGE && facing >= -0.1) {
+      enemy.hp -= 1;
+      hitSomething = true;
+      battle.lastHitText = `${enemy.name}に一撃`;
+      if (enemy.hp <= 0) {
+        enemy.alive = false;
+        finishCastleBattleObjective(enemy.damageReward, `${enemy.name}を討ち取った`);
+      }
+    }
+  }
+  const keepDx = battle.keep.x - player.x;
+  const keepDy = battle.keep.y - player.y;
+  const captainAlive = battle.enemies.some((enemy) => enemy.alive && enemy.kind === "captain");
+  if (keepDx * keepDx + keepDy * keepDy <= 1.4 * 1.4 && !captainAlive) {
+    hitSomething = true;
+    finishCastleBattleObjective(1 + (siegeScene.tactic && siegeScene.tactic.id === "raid" ? 1 : 0), "本丸へ斬り込んだ");
+  }
+  if (!hitSomething) battle.lastHitText = "間合いが足りない";
+}
+
+function updateCastleBattleFrame() {
+  const battle = siegeScene.castleBattle;
+  if (!siegeScene.open || siegeScene.resolved || siegeScene.phase !== "action" || !battle) return;
+  const player = battle.player;
+  battle.timer = max(0, battle.timer - 1);
+  if (player.cooldown > 0) player.cooldown -= 1;
+  if (player.invuln > 0) player.invuln -= 1;
+  if (player.blink > 0) player.blink -= 1;
+  let moveX = 0;
+  let moveY = 0;
+  if (pressedKeys.ArrowLeft || pressedKeys.a || pressedKeys.A) moveX -= 1;
+  if (pressedKeys.ArrowRight || pressedKeys.d || pressedKeys.D) moveX += 1;
+  if (pressedKeys.ArrowUp || pressedKeys.w || pressedKeys.W) moveY -= 1;
+  if (pressedKeys.ArrowDown || pressedKeys.s || pressedKeys.S) moveY += 1;
+  if (moveX !== 0 || moveY !== 0) {
+    const mag = Math.hypot(moveX, moveY) || 1;
+    moveX /= mag;
+    moveY /= mag;
+    player.dirX = moveX;
+    player.dirY = moveY;
+    castleBattleMoveUnit(battle, player, moveX * CASTLE_BATTLE_PLAYER_SPEED, moveY * CASTLE_BATTLE_PLAYER_SPEED);
+  }
+  for (const enemy of battle.enemies) {
+    if (!enemy.alive) continue;
+    if (enemy.cooldown > 0) enemy.cooldown -= 1;
+    const dx = player.x - enemy.x;
+    const dy = player.y - enemy.y;
+    const distNow = Math.hypot(dx, dy);
+    if (distNow <= enemy.aggro && distNow > 0.01) {
+      const stepX = (dx / distNow) * enemy.speed;
+      const stepY = (dy / distNow) * enemy.speed;
+      castleBattleMoveUnit(battle, enemy, stepX, stepY);
+    }
+    if (distNow <= 0.72 && enemy.cooldown <= 0 && player.invuln <= 0) {
+      player.hp -= enemy.attack;
+      battle.hpLostTotal += enemy.attack;
+      enemy.cooldown = CASTLE_BATTLE_ENEMY_ATTACK_COOLDOWN;
+      player.invuln = 28;
+      player.blink = 18;
+      battle.lastHitText = `${enemy.name}の反撃で兵が崩れた`;
+      if (player.hp <= 0) {
+        resetCastleBattleRound("城内で撃退された。");
+        return;
+      }
+    }
+  }
+  if (battle.timer <= 0) {
+    resetCastleBattleRound("時間切れで攻め手が止まった。");
+  }
 }
 
 function tileDefenseProfile(tile) {
