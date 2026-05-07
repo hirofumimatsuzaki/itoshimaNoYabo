@@ -4558,15 +4558,23 @@ function tileDefenseProfile(tile) {
   };
 }
 
-function battleAttackerOfficer() {
-  return leadOfficer(HUMAN_PLAYER_ID, "attack");
+function battleAttackerOfficerFor(playerId) {
+  return leadOfficer(playerId, "attack");
 }
 
-function tacticAvailable(tactic, target, cost) {
-  const me = playerById(HUMAN_PLAYER_ID);
+function battleAttackerOfficer() {
+  return battleAttackerOfficerFor(HUMAN_PLAYER_ID);
+}
+
+function tacticAvailableForPlayer(playerId, tactic, target, cost) {
+  const me = playerById(playerId);
   if (!me || me.force < cost) return false;
   if (!tactic.targetTypes) return true;
   return tactic.targetTypes.includes(target.type) || !tileDefenseProfile(target).hasOfficer;
+}
+
+function tacticAvailable(tactic, target, cost) {
+  return tacticAvailableForPlayer(HUMAN_PLAYER_ID, tactic, target, cost);
 }
 
 function tacticCost(baseNeed, tactic) {
@@ -5258,6 +5266,108 @@ function endTurn() {
   }
 }
 
+function aiAttackPriority(ai, from, target, need) {
+  const defender = tileDefenseProfile(target);
+  let score = aiTileScore(target) * 1.2 - need * 0.6;
+  if (target.owner === HUMAN_PLAYER_ID) score += 14;
+  if (target.type === TYPE.JO) score += 20 + max(0, castleMaxHp(target) - (target.castleHp || castleMaxHp(target)));
+  if (target.type === TYPE.KOBO || target.type === TYPE.MINATO) score += 8;
+  if (target.type === TYPE.JINJA || target.type === TYPE.TERA) score += 6;
+  if (!defender.hasOfficer) score += 3;
+  if (from.type === TYPE.JO) score += 2;
+  if (from.type === TYPE.YAMA) score += 1;
+  return score;
+}
+
+function chooseAiAttackPlan(ai, owned) {
+  let best = null;
+  for (const from of owned) {
+    for (const target of neighbors6(from.c, from.r)) {
+      const status = attackTargetStatus(ai, from, target);
+      if (!status.ok) continue;
+      const score = aiAttackPriority(ai, from, target, status.need);
+      if (!best || score > best.score) {
+        best = { from, target, need: status.need, score };
+      }
+    }
+  }
+  return best;
+}
+
+function chooseAiTactic(playerId, target, baseNeed) {
+  const attackerOfficer = battleAttackerOfficerFor(playerId);
+  const defender = tileDefenseProfile(target);
+  let best = null;
+  for (const tactic of BATTLE_TACTICS) {
+    const cost = tacticCost(baseNeed, tactic);
+    if (!tacticAvailableForPlayer(playerId, tactic, target, cost)) continue;
+    const attackStat = attackerOfficer ? (attackerOfficer[tactic.stat] || 0) : 3;
+    const defenseStat = defender[tactic.stat] || 1;
+    let score = attackStat - defenseStat + tactic.baseDamage * 2 - (tactic.costMod || 0);
+    if (target.type === TYPE.JO && tactic.id === "siege") score += 3;
+    if (target.type !== TYPE.JO && tactic.id === "raid") score += 1;
+    if ((target.type === TYPE.JINJA || target.type === TYPE.TERA) && tactic.id === "persuade") score += 2;
+    if (tactic.id === "duel" && defender.hasOfficer) score += 2;
+    if (!best || score > best.score) best = { tactic, cost, score };
+  }
+  return best;
+}
+
+function resolveAiAttack(ai, plan) {
+  if (!ai || !plan || !plan.from || !plan.target) return "";
+  const choice = chooseAiTactic(ai.id, plan.target, plan.need);
+  if (!choice) return "";
+
+  const from = plan.from;
+  const target = plan.target;
+  const tactic = choice.tactic;
+  const finalCost = choice.cost;
+  const attackerOfficer = battleAttackerOfficerFor(ai.id);
+  const defender = tileDefenseProfile(target);
+  const attackStat = attackerOfficer ? (attackerOfficer[tactic.stat] || 0) : 3;
+  const defenseStat = defender[tactic.stat] || 1;
+  const roll = floor(random(1, 7));
+  const score = attackStat + roll + (tactic.id === "persuade" && (target.type === TYPE.JINJA || target.type === TYPE.TERA) ? 2 : 0);
+  const defenseScore = defenseStat + (defender.hasOfficer ? 3 : 1) + buildingLevelBonus(target);
+  const success = score >= defenseScore;
+  let damage = tactic.baseDamage + (success ? 1 : 0);
+  if (tactic.id === "siege" && target.type === TYPE.JO) damage += 1;
+  if (tactic.id === "duel" && success && attackStat >= defenseStat + 2) damage += 1;
+  if (tactic.id === "raid" && !success) damage = max(0, damage - 1);
+  if (target.type !== TYPE.JO && success) damage += 1;
+  damage = max(0, damage);
+
+  ai.force -= finalCost;
+
+  if (target.type === TYPE.JO) {
+    const maxHp = castleMaxHp(target);
+    const hpBefore = target.castleHp > 0 ? target.castleHp : maxHp;
+    const hpAfter = max(0, hpBefore - damage);
+    target.castleHp = hpAfter;
+    if (hpAfter > 0) {
+      pushTileFx(target.c, target.r, `敵攻城 ${hpAfter}/${maxHp}`, color(220, 70, 70));
+      spendAction(ai.id);
+      return `${tileLabel(from)}→${tileLabel(target)} を${tactic.name}で攻城 (${hpAfter}/${maxHp})`;
+    }
+  } else if (!success && defender.hasOfficer) {
+    pushTileFx(target.c, target.r, "迎撃", color(196, 160, 92));
+    spendAction(ai.id);
+    return `${tileLabel(from)}→${tileLabel(target)} は${defender.name}に阻止された`;
+  }
+
+  setOwner(ai.id, target.c, target.r);
+  capturePopulationLoss(target);
+  if (target.type === TYPE.JO) target.castleHp = castleMaxHp(target);
+  const officerMoment = tryOfficerMoment(ai.id, "attack", from, target);
+  pushTileFx(target.c, target.r, "敵制圧", color(220, 70, 70));
+  latestComment = gainComment(ai.id, target, "攻撃");
+  const missionText = advanceMission(ai.id, "capture", target);
+  spendAction(ai.id);
+  return `${tileLabel(from)}→${tileLabel(target)} を${tactic.name}で制圧`
+    + (officerMoment ? ` / ${officerMoment}` : "")
+    + (missionText ? ` / ${missionText}` : "");
+}
+
 function passive(playerIndex) {
   const p = players[playerIndex];
   const officerBoost = officerBonuses(p.id);
@@ -5625,6 +5735,15 @@ function aiTurn(aiIndex) {
       logs.push("軍備増強:+3");
       spendAction(aiId);
       continue;
+    }
+
+    const attackPlan = chooseAiAttackPlan(ai, owned);
+    if (attackPlan && (attackPlan.target.owner === HUMAN_PLAYER_ID || ai.force >= attackPlan.need + 2 || random() < 0.55)) {
+      const attackLog = resolveAiAttack(ai, attackPlan);
+      if (attackLog) {
+        logs.push(attackLog);
+        continue;
+      }
     }
 
     ai.gold += 2;
